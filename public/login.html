@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="vi">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Đăng nhập — Zalo Auto</title>
+    <link rel="stylesheet" href="/styles.css" />
+    <style>
+        body {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            background: linear-gradient(135deg, #0068ff 0%, #0050c8 100%);
+        }
+        .login-card {
+            background: #fff;
+            padding: 32px;
+            border-radius: 12px;
+            width: min(380px, 92vw);
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
+        }
+        .login-card h1 {
+            margin: 0 0 6px;
+            font-size: 22px;
+        }
+        .login-card .muted {
+            margin: 0 0 24px;
+            color: var(--muted);
+            font-size: 13px;
+        }
+        .login-card form {
+            display: grid;
+            gap: 14px;
+        }
+        .login-card button {
+            width: 100%;
+            padding: 10px;
+            font-size: 14px;
+        }
+        .login-card .err {
+            background: rgba(214, 51, 79, 0.08);
+            color: var(--danger);
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-size: 13px;
+            display: none;
+        }
+        .login-card .err.show { display: block; }
+    </style>
+</head>
+<body>
+    <div class="login-card">
+        <h1>Zalo Auto</h1>
+        <p class="muted">Đăng nhập để vào dashboard quản lý.</p>
+        <div id="err" class="err"></div>
+        <form id="loginForm" autocomplete="on">
+            <label>Username
+                <input name="username" type="text" autocomplete="username" required autofocus />
+            </label>
+            <label>Password
+                <input name="password" type="password" autocomplete="current-password" required />
+            </label>
+            <button type="submit">Đăng nhập</button>
+        </form>
+    </div>
+
+    <script>
+        const $ = (s) => document.querySelector(s);
+        const errBox = $("#err");
+
+        // If already logged in OR auth disabled, go straight to dashboard.
+        (async () => {
+            try {
+                const r = await fetch("/admin/me", { credentials: "same-origin" });
+                if (r.ok) {
+                    const d = await r.json();
+                    if (d.ok && (d.data.authEnabled === false || d.data.user)) {
+                        location.href = "/";
+                    }
+                }
+            } catch {}
+        })();
+
+        $("#loginForm").addEventListener("submit", async (ev) => {
+            ev.preventDefault();
+            errBox.classList.remove("show");
+            const fd = new FormData(ev.currentTarget);
+            const body = {
+                username: fd.get("username"),
+                password: fd.get("password"),
+            };
+            const btn = ev.currentTarget.querySelector("button");
+            btn.disabled = true;
+            btn.textContent = "Đang đăng nhập…";
+            try {
+                const r = await fetch("/admin/login", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(body),
+                    credentials: "same-origin",
+                });
+                const d = await r.json();
+                if (d.ok) {
+                    const next = new URLSearchParams(location.search).get("next") || "/";
+                    location.href = next;
+                    return;
+                }
+                errBox.textContent = d.error?.message ?? "Đăng nhập thất bại";
+                errBox.classList.add("show");
+            } catch (err) {
+                errBox.textContent = err.message;
+                errBox.classList.add("show");
+            } finally {
+                btn.disabled = false;
+                btn.textContent = "Đăng nhập";
+            }
+        });
+    </script>
+</body>
+</html>

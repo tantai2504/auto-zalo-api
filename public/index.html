@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="vi">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Tài khoản — Zalo Auto</title>
+    <link rel="stylesheet" href="/styles.css" />
+    <script src="/auth-guard.js"></script>
+</head>
+<body>
+    <header>
+        <div class="header-inner">
+            <div>
+                <h1>Zalo Auto</h1>
+                <p class="muted">Quản lý phiên đăng nhập đa tài khoản</p>
+            </div>
+            <nav class="header-nav">
+                <a href="/add.html" class="primary">+ Thêm tài khoản</a>
+                <a href="/explorer.html">API Explorer</a>
+                <a href="/docs" target="_blank" rel="noopener">Swagger</a>
+                <a href="#" id="logoutBtn">Đăng xuất</a>
+            </nav>
+        </div>
+    </header>
+
+    <main>
+        <section class="card">
+            <div class="header-row">
+                <h2>Tài khoản đã lưu</h2>
+                <div class="actions-row">
+                    <button id="checkAllBtn" class="ghost">Check tất cả</button>
+                    <button id="reloadBtn" class="ghost">Tải lại</button>
+                </div>
+            </div>
+            <table id="accountsTable">
+                <thead>
+                    <tr>
+                        <th>Tài khoản</th>
+                        <th>Account ID <span class="muted" title="UUID dùng trong URL /api/{accountId}/...">(API)</span></th>
+                        <th>Zalo UID</th>
+                        <th>Status</th>
+                        <th>Session</th>
+                        <th>Listener</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+            <p id="emptyHint" class="muted hidden">Chưa có tài khoản nào — <a href="/add.html">thêm tài khoản đầu tiên</a>.</p>
+        </section>
+    </main>
+
+    <!-- Edit modal: tabs for "Thông tin" + "Token mới" -->
+    <div id="modal" class="modal hidden">
+        <div class="modal-content modal-wide">
+            <div class="modal-head">
+                <h3 id="editTitle">Chỉnh sửa</h3>
+                <button id="cancelEdit" class="ghost icon-btn" aria-label="Close">×</button>
+            </div>
+            <div class="tabs">
+                <button class="tab active" data-edit-tab="info">Thông tin</button>
+                <button class="tab" data-edit-tab="token">Token mới</button>
+                <button class="tab" data-edit-tab="webhook">Webhook</button>
+            </div>
+
+            <div class="tab-panel" data-edit-panel="info">
+                <form id="editForm">
+                    <input type="hidden" name="id" />
+                    <label>Display name<input name="displayName" type="text" /></label>
+                    <label>Phone<input name="phone" type="text" /></label>
+                    <label>Status
+                        <select name="status">
+                            <option value="active">active</option>
+                            <option value="disabled">disabled</option>
+                        </select>
+                    </label>
+                    <div class="modal-actions">
+                        <button type="submit">Lưu thay đổi</button>
+                    </div>
+                </form>
+            </div>
+
+            <div class="tab-panel hidden" data-edit-panel="token">
+                <p class="muted">
+                    Dán token mới để cập nhật credentials cho tài khoản này.
+                    Server sẽ thử đăng nhập với token mới rồi thay thế credentials cũ.
+                </p>
+                <form id="refreshTokenForm">
+                    <input type="hidden" name="id" />
+                    <label>Token (base64)<textarea name="token" rows="4" placeholder="eyJ6X3V1aWQiOi..."></textarea></label>
+                    <details>
+                        <summary>Hoặc nhập trực tiếp z_uuid + zpw_sek</summary>
+                        <label>z_uuid<input name="z_uuid" type="text" /></label>
+                        <label>zpw_sek<input name="zpw_sek" type="text" /></label>
+                    </details>
+                    <div class="modal-actions">
+                        <button type="submit">Cập nhật token</button>
+                    </div>
+                </form>
+            </div>
+
+            <div class="tab-panel hidden" data-edit-panel="webhook">
+                <p class="muted">
+                    Khi listener bật, mọi event Zalo (message / reaction / undo / group_event ...)
+                    sẽ POST tới <code>webhookUrl</code>. Nếu có <code>webhookSecret</code>,
+                    body được ký HMAC-SHA256 — kiểm header <code>X-Signature: sha256=&lt;hex&gt;</code>.
+                </p>
+                <form id="webhookForm">
+                    <input type="hidden" name="id" />
+                    <label>Webhook URL
+                        <input name="webhookUrl" type="url" placeholder="https://your-server.com/zalo-events" />
+                    </label>
+                    <label>Webhook secret <span class="muted">(tuỳ chọn — để ký payload)</span>
+                        <input name="webhookSecret" type="text" placeholder="Để trống nếu không cần ký" />
+                    </label>
+                    <div class="modal-actions">
+                        <button type="submit">Lưu webhook</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div id="toasts"></div>
+    <script src="/app.js"></script>
+</body>
+</html>

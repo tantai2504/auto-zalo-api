@@ -1,0 +1,174 @@
+import { fileURLToPath } from "node:url";
+import { dirname, resolve } from "node:path";
+import cookieParser from "cookie-parser";
+import express from "express";
+import { pinoHttp } from "pino-http";
+import swaggerUi from "swagger-ui-express";
+import { config } from "./config.js";
+import { logger } from "./logger.js";
+import { connectDb, closeDb, pingDb, startQrCleanupLoop, stopQrCleanupLoop } from "./db/index.js";
+import { authRouter } from "./routes/auth.js";
+import { accountsRouter } from "./routes/accounts.js";
+import { apiRouter } from "./routes/api.js";
+import { methodsRouter } from "./routes/methods.js";
+import { quickRouter } from "./routes/quick.js";
+import { adminRouter } from "./routes/admin.js";
+import { openapiSpec } from "./openapi.js";
+import { fail, ok as okEnvelope } from "./http/response.js";
+import {
+    corsMiddleware,
+    gzipCompression,
+    makeRateLimiter,
+    securityHeaders,
+} from "./http/middleware.js";
+import { isAdminAuthEnabled, requireAuth } from "./http/admin.js";
+import {
+    sessions,
+    startKeepAliveLoop,
+    stopKeepAliveLoop,
+    startIdleEvictionLoop,
+    stopIdleEvictionLoop,
+} from "./zalo/manager.js";
+import { attachWebSocketServer } from "./events/ws.js";
+import { startWebhookDispatcher } from "./events/webhook.js";
+import { isPinned } from "./events/orchestrator.js";
+
+const PUBLIC_DIR = resolve(dirname(fileURLToPath(import.meta.url)), "../public");
+
+// Catch unhandled async errors so a single bad promise doesn't tear down the
+// process. We log + keep going; if the process is in a truly broken state, the
+// orchestrator (PM2 / systemd / cPanel Phusion) will restart it.
+process.on("unhandledRejection", (reason) => {
+    logger.error({ err: reason }, "unhandledRejection (recovered)");
+});
+process.on("uncaughtException", (err) => {
+    logger.error({ err }, "uncaughtException (recovered)");
+});
+
+async function main(): Promise<void> {
+    await connectDb();
+
+    const app = express();
+
+    // Trust the first proxy (nginx, cPanel Phusion Passenger, ...) so that
+    // req.ip reflects the real client and rate-limit / logs are accurate.
+    app.set("trust proxy", 1);
+    app.disable("x-powered-by");
+
+    app.use(securityHeaders);
+    app.use(gzipCompression);
+    app.use(corsMiddleware());
+    app.use(cookieParser());
+    app.use(express.json({ limit: "10mb" }));
+    app.use(pinoHttp({ logger }));
+
+    // ----- Public endpoints (no auth required) -----------------------
+    app.get("/health", async (_req, res) => {
+        const dbUp = await pingDb();
+        const data = {
+            service: "zalo-auto",
+            uptime: process.uptime(),
+            sessions: sessions.poolSize(),
+            db: dbUp ? "up" : "down",
+        };
+        if (!dbUp) {
+            return fail(res, "INTERNAL_ERROR", "MongoDB unreachable");
+        }
+        okEnvelope(res, data);
+    });
+
+    // OpenAPI spec — public, cached for 1 hour.
+    app.get("/openapi.json", cacheControl(3600), (_req, res) => res.json(openapiSpec));
+
+    // Swagger UI assets — public.
+    app.use(
+        "/docs",
+        swaggerUi.serve,
+        swaggerUi.setup(openapiSpec, {
+            customSiteTitle: "zalo-auto API docs",
+            swaggerOptions: { docExpansion: "list", filter: true, persistAuthorization: true },
+        }),
+    );
+
+    // ----- Admin auth (login/logout/me) — public for login itself ----
+    app.use("/admin", makeRateLimiter(), adminRouter);
+
+    // ----- Protected endpoints (rate-limited + admin cookie OR API_KEY) ---
+    const guarded = [makeRateLimiter(), requireAuth];
+    app.use("/methods", cacheControl(300), ...guarded, methodsRouter);
+    app.use("/auth", ...guarded, authRouter);
+    app.use("/accounts", ...guarded, accountsRouter);
+    app.use("/quick", ...guarded, quickRouter);
+    app.use("/api", ...guarded, apiRouter);
+
+    // ----- Static UI --------------------------------------------------
+    app.use(express.static(PUBLIC_DIR, { index: "index.html" }));
+
+    // ----- 404 (after static so /assets/* isn't shadowed) ------------
+    app.use((_req, res) => {
+        fail(res, "NOT_FOUND", "Route not found");
+    });
+
+    // ----- Final error handler ----------------------------------------
+    app.use(
+        (
+            err: unknown,
+            _req: express.Request,
+            res: express.Response,
+            _next: express.NextFunction,
+        ) => {
+            logger.error({ err }, "unhandled request error");
+            const message = err instanceof Error ? err.message : "Internal error";
+            fail(res, "INTERNAL_ERROR", message);
+        },
+    );
+
+    const server = app.listen(config.PORT, config.HOST, () => {
+        logger.info(
+            {
+                host: config.HOST,
+                port: config.PORT,
+                adminAuth: isAdminAuthEnabled(),
+                apiKey: !!config.API_KEY,
+                rateLimit: config.RATE_LIMIT_MAX || "off",
+                keepAliveSec: config.KEEPALIVE_INTERVAL_SEC || "off",
+            },
+            `zalo-auto listening on http://${config.HOST}:${config.PORT}`,
+        );
+    });
+
+    // Realtime fanout — listener attaches lazily when a consumer arrives
+    // (WebSocket subscribe OR a configured webhook URL).
+    attachWebSocketServer(server);
+    void startWebhookDispatcher();
+    startKeepAliveLoop();
+    startIdleEvictionLoop(isPinned);
+    startQrCleanupLoop();
+
+    const shutdown = async (signal: string) => {
+        logger.info({ signal }, "shutting down");
+        stopKeepAliveLoop();
+        stopIdleEvictionLoop();
+        stopQrCleanupLoop();
+        server.close();
+        await closeDb();
+        process.exit(0);
+    };
+    process.on("SIGINT", () => void shutdown("SIGINT"));
+    process.on("SIGTERM", () => void shutdown("SIGTERM"));
+}
+
+/** Cache-Control middleware factory. Sets `public, max-age=<seconds>`. */
+function cacheControl(seconds: number): express.RequestHandler {
+    const value = `public, max-age=${seconds}`;
+    return (_req, res, next) => {
+        res.setHeader("Cache-Control", value);
+        next();
+    };
+}
+
+
+main().catch((err) => {
+    logger.error({ err }, "fatal startup error");
+    process.exit(1);
+});
