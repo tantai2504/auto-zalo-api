@@ -42,7 +42,6 @@
                         <th>Zalo UID</th>
                         <th>Status</th>
                         <th>Session</th>
-                        <th>Listener</th>
                         <th></th>
                     </tr>
                 </thead>
@@ -62,7 +61,7 @@
             <div class="tabs">
                 <button class="tab active" data-edit-tab="info">Thông tin</button>
                 <button class="tab" data-edit-tab="token">Token mới</button>
-                <button class="tab" data-edit-tab="webhook">Webhook</button>
+                <button class="tab" data-edit-tab="event">Event &amp; Webhook</button>
             </div>
 
             <div class="tab-panel" data-edit-panel="info">
@@ -101,11 +100,25 @@
                 </form>
             </div>
 
-            <div class="tab-panel hidden" data-edit-panel="webhook">
+            <div class="tab-panel hidden" data-edit-panel="event">
+                <h4 class="subhead">Listener</h4>
                 <p class="muted">
-                    Khi listener bật, mọi event Zalo (message / reaction / undo / group_event ...)
-                    sẽ POST tới <code>webhookUrl</code>. Nếu có <code>webhookSecret</code>,
-                    body được ký HMAC-SHA256 — kiểm header <code>X-Signature: sha256=&lt;hex&gt;</code>.
+                    Khi bật, server lắng nghe event Zalo (message / reaction / undo / group_event ...)
+                    cho tài khoản này. Listener tự attach khi có WebSocket subscriber hoặc webhook URL.
+                </p>
+                <div class="listener-toggle">
+                    <span>Trạng thái listener:</span>
+                    <span id="listenerBadge" class="badge"></span>
+                    <button id="listenerToggleBtn" class="ghost">—</button>
+                </div>
+
+                <hr class="modal-divider" />
+
+                <h4 class="subhead">Webhook</h4>
+                <p class="muted">
+                    Khi listener bật, mọi event sẽ POST tới <code>webhookUrl</code>.
+                    Nếu có <code>webhookSecret</code>, body được ký HMAC-SHA256 — kiểm header
+                    <code>X-Signature: sha256=&lt;hex&gt;</code>.
                 </p>
                 <form id="webhookForm">
                     <input type="hidden" name="id" />
@@ -119,6 +132,28 @@
                         <button type="submit">Lưu webhook</button>
                     </div>
                 </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Cookie viewer modal -->
+    <div id="cookieModal" class="modal hidden">
+        <div class="modal-content modal-wide">
+            <div class="modal-head">
+                <h3>Cookie session — <span id="cookieAcc"></span></h3>
+                <button id="cancelCookie" class="ghost icon-btn" aria-label="Close">×</button>
+            </div>
+            <p class="muted">
+                Đây là cookie session đã được giải mã. Dùng để debug hoặc xuất sang tool khác.
+                <strong>Không chia sẻ ra ngoài.</strong>
+            </p>
+            <h4 class="subhead">Quick fields</h4>
+            <pre id="cookieSnapshot" class="code-block">—</pre>
+            <h4 class="subhead">Full credentials JSON</h4>
+            <pre id="cookieFull" class="code-block">—</pre>
+            <div class="modal-actions">
+                <button id="copyCookieBtn">Copy full JSON</button>
+                <button id="copyZpwSekBtn" class="ghost">Copy zpw_sek</button>
             </div>
         </div>
     </div>

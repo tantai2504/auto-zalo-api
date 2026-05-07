@@ -103,14 +103,6 @@ function sessionBadge(accountId) {
     return `<span class="badge session-${s}">${label}</span>`;
 }
 
-function listenerCell(acc) {
-    const on = acc.listenerEnabled;
-    const wh = acc.webhookUrl ? "↗" : "";
-    return `<button class="badge listener-${on ? "on" : "off"}" data-action="toggle-listener" title="${
-        on ? "Listener ON — click để tắt" : "Listener OFF — click để bật"
-    }">${on ? "ON" : "OFF"}${wh ? ` ${wh}` : ""}</button>`;
-}
-
 function renderAccounts(accounts) {
     const tbody = $("#accountsTable tbody");
     tbody.innerHTML = "";
@@ -132,21 +124,19 @@ function renderAccounts(accounts) {
             <td class="uid" title="${escapeHtml(acc.uid)}">${escapeHtml(shortUid(acc.uid))}</td>
             <td><span class="badge ${acc.status}">${acc.status}</span></td>
             <td class="session-cell">${sessionBadge(acc.id)}</td>
-            <td class="listener-cell">${listenerCell(acc)}</td>
             <td class="actions">
                 <button class="ghost" data-action="check" title="Kiểm tra session">Check</button>
-                <button class="ghost" data-action="edit" title="Sửa thông tin / token / webhook">Sửa</button>
+                <button class="ghost" data-action="cookie" title="Xem cookie session">Cookie</button>
+                <button class="ghost" data-action="edit" title="Sửa thông tin / token / event">Sửa</button>
                 <button class="ghost" data-action="toggle" title="${acc.status === "active" ? "Tắt tài khoản" : "Bật tài khoản"}">${acc.status === "active" ? "Tắt" : "Bật"}</button>
                 <button class="danger" data-action="del" title="Xoá">Xoá</button>
             </td>
         `;
         tr.querySelector('[data-action="check"]').addEventListener("click", () => checkAcc(acc));
+        tr.querySelector('[data-action="cookie"]').addEventListener("click", () => openCookie(acc));
         tr.querySelector('[data-action="edit"]').addEventListener("click", () => openEdit(acc));
         tr.querySelector('[data-action="toggle"]').addEventListener("click", () => toggleAcc(acc));
         tr.querySelector('[data-action="del"]').addEventListener("click", () => deleteAcc(acc));
-        tr.querySelector('[data-action="toggle-listener"]').addEventListener("click", () =>
-            toggleListener(acc),
-        );
         tr.querySelector('[data-action="copy-id"]').addEventListener("click", () =>
             copyId(acc.id),
         );
@@ -167,22 +157,6 @@ async function copyId(id) {
         try { document.execCommand("copy"); toast(`Đã copy: ${id}`, "success"); }
         catch { toast("Không copy được — chọn thủ công", "error"); }
         ta.remove();
-    }
-}
-
-async function toggleListener(acc) {
-    const url = acc.listenerEnabled
-        ? `/accounts/${acc.id}/listener/stop`
-        : `/accounts/${acc.id}/listener/start`;
-    try {
-        await api(url, { method: "POST" });
-        toast(
-            `Listener ${acc.listenerEnabled ? "đã tắt" : "đã bật"} cho ${acc.displayName ?? acc.uid}`,
-            "success",
-        );
-        loadAccounts();
-    } catch (err) {
-        toast(err.message, "error");
     }
 }
 
@@ -265,7 +239,11 @@ async function deleteAcc(acc) {
 
 // ----- Edit modal ------------------------------------------------
 
+// Currently-open account in the edit modal (used by listener toggle in Event tab).
+let editingAcc = null;
+
 function openEdit(acc) {
+    editingAcc = acc;
     $("#editTitle").textContent = `Sửa: ${acc.displayName ?? acc.uid}`;
 
     // Info tab
@@ -282,7 +260,8 @@ function openEdit(acc) {
     tokenForm.z_uuid.value = "";
     tokenForm.zpw_sek.value = "";
 
-    // Webhook tab
+    // Event tab — listener badge + webhook form
+    renderListenerToggle(acc);
     const webhookForm = $("#webhookForm");
     webhookForm.id.value = acc.id;
     webhookForm.webhookUrl.value = acc.webhookUrl ?? "";
@@ -295,6 +274,92 @@ function openEdit(acc) {
     switchEditTab("info");
     $("#modal").classList.remove("hidden");
 }
+
+function renderListenerToggle(acc) {
+    const badge = $("#listenerBadge");
+    const btn = $("#listenerToggleBtn");
+    if (acc.listenerEnabled) {
+        badge.className = "badge listener-on";
+        badge.textContent = "ON";
+        btn.textContent = "Tắt listener";
+    } else {
+        badge.className = "badge listener-off";
+        badge.textContent = "OFF";
+        btn.textContent = "Bật listener";
+    }
+}
+
+$("#listenerToggleBtn").addEventListener("click", async () => {
+    if (!editingAcc) return;
+    const url = editingAcc.listenerEnabled
+        ? `/accounts/${editingAcc.id}/listener/stop`
+        : `/accounts/${editingAcc.id}/listener/start`;
+    const btn = $("#listenerToggleBtn");
+    btn.disabled = true;
+    try {
+        const updated = await api(url, { method: "POST" });
+        editingAcc = updated;
+        renderListenerToggle(updated);
+        toast(`Listener ${updated.listenerEnabled ? "đã bật" : "đã tắt"}`, "success");
+        loadAccounts();
+    } catch (err) {
+        toast(err.message, "error");
+    } finally {
+        btn.disabled = false;
+    }
+});
+
+// ----- Cookie viewer modal -----------------------------------------
+
+async function openCookie(acc) {
+    $("#cookieAcc").textContent = acc.displayName ?? acc.uid;
+    $("#cookieSnapshot").textContent = "Đang tải…";
+    $("#cookieFull").textContent = "Đang tải…";
+    $("#cookieModal").classList.remove("hidden");
+    try {
+        const data = await api(`/accounts/${acc.id}/credentials`);
+        const c = data.credentials;
+        const snapshot = c.cookieSnapshot ?? {};
+        $("#cookieSnapshot").textContent = JSON.stringify({
+            zpw_sek: snapshot.zpw_sek ?? "(không có)",
+            zpw_enk: snapshot.zpw_enk ?? "(không có)",
+            app: snapshot.app ?? "(không có)",
+            imei: c.imei,
+            uid: c.uid,
+            secretKey: c.secretKey,
+            userAgent: c.userAgent,
+        }, null, 2);
+        $("#cookieFull").textContent = JSON.stringify(c, null, 2);
+        $("#copyCookieBtn").dataset.payload = JSON.stringify(c, null, 2);
+        $("#copyZpwSekBtn").dataset.payload = snapshot.zpw_sek ?? "";
+    } catch (err) {
+        $("#cookieSnapshot").textContent = `Lỗi: ${err.message}`;
+        $("#cookieFull").textContent = "";
+    }
+}
+
+$("#cancelCookie").addEventListener("click", () => $("#cookieModal").classList.add("hidden"));
+
+$("#copyCookieBtn").addEventListener("click", async () => {
+    const payload = $("#copyCookieBtn").dataset.payload ?? "";
+    try {
+        await navigator.clipboard.writeText(payload);
+        toast("Đã copy full credentials", "success");
+    } catch {
+        toast("Không copy được", "error");
+    }
+});
+
+$("#copyZpwSekBtn").addEventListener("click", async () => {
+    const payload = $("#copyZpwSekBtn").dataset.payload ?? "";
+    if (!payload) return toast("Account chưa có zpw_sek", "error");
+    try {
+        await navigator.clipboard.writeText(payload);
+        toast("Đã copy zpw_sek", "success");
+    } catch {
+        toast("Không copy được", "error");
+    }
+});
 
 function switchEditTab(name) {
     $$("[data-edit-tab]").forEach((t) =>

@@ -3,7 +3,7 @@
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>API Explorer — Zalo Auto</title>
+    <title>Tài liệu API — Zalo Auto</title>
     <link rel="stylesheet" href="/styles.css" />
     <link rel="stylesheet" href="/explorer.css" />
     <script src="/config.js"></script>
@@ -13,13 +13,13 @@
     <header>
         <div class="header-inner">
             <div>
-                <h1>API Explorer</h1>
-                <p class="muted">Test trực tiếp ~145 method zca-js qua backend của bạn</p>
+                <h1>Tài liệu API</h1>
+                <p class="muted">Hướng dẫn cách dùng từng API — phân nhóm theo tính năng</p>
             </div>
             <nav class="header-nav">
                 <a href="/">Tài khoản</a>
-                <a href="/docs" target="_blank" rel="noopener">Swagger</a>
-                <a href="/methods" target="_blank" rel="noopener">Catalog JSON</a>
+                <a href="/api-keys.html">API Keys</a>
+                <a href="/docs" target="_blank" rel="noopener">Swagger (test API)</a>
                 <a href="#" id="logoutBtn">Đăng xuất</a>
             </nav>
         </div>
@@ -27,10 +27,18 @@
 
     <div class="explorer">
         <aside class="sidebar">
+            <div class="auth-info">
+                <div class="auth-info-title">🔑 Cần API key</div>
+                <div class="auth-info-body">
+                    Mọi request cần header <code>X-API-Key</code>. Tạo key tại
+                    <a href="/api-keys.html">/api-keys.html</a>.
+                </div>
+            </div>
+
             <div class="account-picker">
-                <label>Account
+                <label>Account dùng trong ví dụ
                     <select id="accountSelect">
-                        <option value="">— Chưa có tài khoản —</option>
+                        <option value="">— Chưa chọn —</option>
                     </select>
                 </label>
             </div>
@@ -38,49 +46,18 @@
                 <input id="search" type="search" placeholder="Tìm method..." />
                 <span id="methodCount" class="muted"></span>
             </div>
-            <nav id="methodList" class="method-list"></nav>
+            <nav id="categoryList" class="method-list"></nav>
         </aside>
 
         <main class="content">
-            <section id="quickActions" class="quick-actions">
-                <header class="qa-header">
-                    <h2>⚡ Quick Actions</h2>
-                    <p class="muted">JSON in / JSON out. Mọi response dùng envelope <code>{ ok, data, meta }</code>.</p>
-                </header>
-                <div class="qa-grid">
-                    <div class="qa-card" data-action="find-by-phone">
-                        <div class="qa-card-head">
-                            <h3>Find by phone</h3>
-                            <code class="endpoint">POST /quick/{accountId}/find-by-phone</code>
-                        </div>
-                        <label>Body
-                            <textarea class="qa-body" rows="3">{
-  "phone": "+84..."
-}</textarea>
-                        </label>
-                        <button class="qa-run">Run</button>
-                        <pre class="qa-output">— chưa chạy —</pre>
-                    </div>
-                    <div class="qa-card" data-action="send-by-phone">
-                        <div class="qa-card-head">
-                            <h3>Send by phone</h3>
-                            <code class="endpoint">POST /quick/{accountId}/send-by-phone</code>
-                        </div>
-                        <label>Body
-                            <textarea class="qa-body" rows="6">{
-  "phone": "+84...",
-  "message": "Xin chào"
-}</textarea>
-                        </label>
-                        <button class="qa-run">Run</button>
-                        <pre class="qa-output">— chưa chạy —</pre>
-                    </div>
-                </div>
-            </section>
-
             <div id="welcome" class="welcome">
-                <h2>📚 Catalog method</h2>
-                <p class="muted">Chọn method bên trái để xem mô tả + try-it-out chi tiết. Có 146 method.</p>
+                <h2>👋 Bắt đầu</h2>
+                <ol>
+                    <li>Tạo API key tại <a href="/api-keys.html">/api-keys.html</a> (lưu key — chỉ hiển thị 1 lần).</li>
+                    <li>Thêm tài khoản Zalo tại <a href="/">/</a> rồi copy <strong>Account ID</strong>.</li>
+                    <li>Chọn nhóm tính năng bên trái → click method để xem cách gọi.</li>
+                    <li>Mọi response đều có dạng <code>{ ok, data, meta }</code>.</li>
+                </ol>
             </div>
 
             <article id="methodPanel" class="method-panel hidden">
@@ -91,29 +68,39 @@
                 <p id="methodDesc" class="method-desc"></p>
                 <p id="methodNotes" class="method-notes hidden"></p>
 
-                <section class="signature-block">
-                    <h3>Signature</h3>
-                    <pre id="methodSignature"></pre>
+                <section class="doc-section">
+                    <h3>📍 URL</h3>
+                    <pre id="docUrl" class="code-block code-mono"></pre>
                 </section>
 
-                <section class="examples-block">
-                    <h3>Examples</h3>
-                    <div id="exampleTabs" class="example-tabs"></div>
+                <section class="doc-section">
+                    <h3>📨 Headers</h3>
+                    <pre id="docHeaders" class="code-block code-mono"></pre>
                 </section>
 
-                <section class="run-block">
-                    <h3>Args (JSON array)</h3>
-                    <textarea id="argsEditor" rows="8" spellcheck="false"></textarea>
-                    <div class="run-controls">
-                        <button id="executeBtn">Execute</button>
-                        <button id="copyCurlBtn" class="ghost">Copy cURL</button>
-                        <span id="runStatus" class="muted"></span>
+                <section class="doc-section">
+                    <h3>📤 Request body (JSON)</h3>
+                    <pre id="docRequest" class="code-block code-json"></pre>
+                    <div id="docFields" class="field-list hidden">
+                        <h4>Mô tả các trường</h4>
+                        <ul id="docFieldList"></ul>
                     </div>
                 </section>
 
-                <section class="response-block">
-                    <h3>Response</h3>
-                    <pre id="responseView" class="response">— chưa chạy —</pre>
+                <section class="doc-section">
+                    <h3>📥 Response (JSON)</h3>
+                    <pre id="docResponse" class="code-block code-json"></pre>
+                </section>
+
+                <section class="doc-section">
+                    <h3>🧪 Ví dụ khác</h3>
+                    <div id="docMoreExamples"></div>
+                </section>
+
+                <section class="doc-section">
+                    <h3>💻 cURL</h3>
+                    <pre id="docCurl" class="code-block"></pre>
+                    <button id="copyCurl" class="ghost">Copy cURL</button>
                 </section>
             </article>
         </main>
