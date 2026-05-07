@@ -546,8 +546,11 @@ export const openapiSpec = {
                 tags: ["API Proxy"],
                 summary: "Gọi bất kỳ method zca-js nào",
                 description:
-                    "Server tìm session đã đăng nhập theo `accountId`, sau đó gọi " +
-                    "`api[method](...args)`. `args` là một mảng được spread vào method.\n\n" +
+                    "Server tìm session theo `accountId` rồi gọi method với các tham số positional.\n\n" +
+                    "**Body** chấp nhận 3 dạng:\n" +
+                    "1. **Array trực tiếp** (khuyến nghị): `[a, b, c]` → spread thành `method(a, b, c)`\n" +
+                    "2. **Rỗng**: không body, hoặc `{}`, hoặc `[]` → method không tham số\n" +
+                    "3. **Wrapped (legacy)**: `{ \"args\": [...] }` → vẫn work, dạng cũ\n\n" +
                     "### Catalog (~" +
                     METHOD_NAMES.length +
                     " methods)\n\n" +
@@ -563,22 +566,41 @@ export const openapiSpec = {
                     },
                 ],
                 requestBody: {
-                    required: true,
+                    required: false,
                     content: {
                         "application/json": {
                             schema: {
-                                type: "object",
-                                required: ["args"],
-                                properties: {
-                                    args: { type: "array", items: {} },
-                                },
+                                oneOf: [
+                                    {
+                                        type: "array",
+                                        items: {},
+                                        description: "Mảng tham số positional (khuyến nghị)",
+                                    },
+                                    {
+                                        type: "object",
+                                        properties: {
+                                            args: { type: "array", items: {} },
+                                        },
+                                        description: "Wrapper cũ — vẫn được chấp nhận",
+                                    },
+                                ],
                             },
                             examples: {
-                                fetchAccountInfo: { summary: "fetchAccountInfo (no args)", value: { args: [] } },
-                                getAllFriends: { summary: "getAllFriends", value: { args: [100, 1] } },
+                                fetchAccountInfo: {
+                                    summary: "fetchAccountInfo — không tham số",
+                                    value: [],
+                                },
+                                getAllFriends: {
+                                    summary: "getAllFriends — count, page",
+                                    value: [100, 1],
+                                },
                                 sendMessage: {
-                                    summary: "sendMessage",
-                                    value: { args: [{ msg: "Xin chào" }, "<userId>", 0] },
+                                    summary: "sendMessage — message, threadId, type",
+                                    value: [{ msg: "Xin chào" }, "<userId>", 0],
+                                },
+                                createGroup: {
+                                    summary: "createGroup — 1 object option",
+                                    value: [{ name: "Tên nhóm", members: ["uid1", "uid2"] }],
                                 },
                             },
                         },
