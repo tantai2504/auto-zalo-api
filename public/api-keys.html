@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="vi">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>API Keys — Zalo Auto</title>
+    <link rel="stylesheet" href="/styles.css" />
+    <script src="/config.js"></script>
+    <script src="/auth-guard.js"></script>
+</head>
+<body>
+    <header>
+        <div class="header-inner">
+            <div>
+                <h1>API Keys</h1>
+                <p class="muted">Tạo và quản lý API key cho từng người dùng / app</p>
+            </div>
+            <nav class="header-nav">
+                <a href="/">Tài khoản</a>
+                <a href="/explorer.html">API Explorer</a>
+                <a href="/docs" target="_blank" rel="noopener">Swagger</a>
+                <a href="#" id="logoutBtn">Đăng xuất</a>
+            </nav>
+        </div>
+    </header>
+
+    <main>
+        <section class="card">
+            <div class="header-row">
+                <h2>Danh sách API key</h2>
+                <div class="actions-row">
+                    <button id="newKeyBtn">+ Tạo key mới</button>
+                    <button id="reloadBtn" class="ghost">Tải lại</button>
+                </div>
+            </div>
+            <table id="keysTable">
+                <thead>
+                    <tr>
+                        <th>Tên</th>
+                        <th>Preview</th>
+                        <th>Trạng thái</th>
+                        <th>Hết hạn</th>
+                        <th>Last used</th>
+                        <th>Tạo</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+            <p id="emptyHint" class="muted hidden">Chưa có key nào. Bấm <strong>Tạo key mới</strong> để bắt đầu.</p>
+        </section>
+
+        <section class="card">
+            <h2>Cách dùng</h2>
+            <p class="muted">Gắn key vào header request:</p>
+            <pre style="background:#1f2933;color:#e4ecf7;padding:12px;border-radius:6px;overflow-x:auto;font-size:12px;">curl -H 'X-API-Key: zk_xxx...' \
+  https://your.host<span id="prefixDemo"></span>/accounts
+
+# Hoặc Bearer
+curl -H 'Authorization: Bearer zk_xxx...' \
+  https://your.host<span id="prefixDemo2"></span>/accounts</pre>
+        </section>
+    </main>
+
+    <!-- Create key modal -->
+    <div id="createModal" class="modal hidden">
+        <div class="modal-content">
+            <div class="modal-head">
+                <h3>Tạo API key</h3>
+                <button id="cancelCreate" class="ghost icon-btn" aria-label="Close">×</button>
+            </div>
+            <form id="createForm">
+                <label>Tên (mô tả)
+                    <input name="name" type="text" placeholder="VD: Mobile app, Cron sync, ..." required />
+                </label>
+                <label>Hết hạn sau
+                    <select name="expiresInSec">
+                        <option value="0">Không bao giờ</option>
+                        <option value="3600">1 giờ</option>
+                        <option value="86400">1 ngày</option>
+                        <option value="604800">7 ngày</option>
+                        <option value="2592000" selected>30 ngày</option>
+                        <option value="7776000">90 ngày</option>
+                        <option value="31536000">1 năm</option>
+                    </select>
+                </label>
+                <div class="modal-actions">
+                    <button type="submit">Tạo key</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Show new key once -->
+    <div id="showKeyModal" class="modal hidden">
+        <div class="modal-content modal-wide">
+            <div class="modal-head">
+                <h3>Key đã tạo — copy ngay!</h3>
+            </div>
+            <div class="warn-box">
+                ⚠️ Đây là lần DUY NHẤT server hiển thị key này.
+                Sau khi đóng popup, không thể xem lại được. Nếu mất, tạo key mới.
+            </div>
+            <label>Plain key
+                <pre id="plainKeyView" class="key-view">—</pre>
+            </label>
+            <div class="modal-actions">
+                <button id="copyKeyBtn">Copy &amp; đóng</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="toasts"></div>
+    <script src="/api-keys.js"></script>
+</body>
+</html>

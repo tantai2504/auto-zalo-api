@@ -44,6 +44,11 @@ async function ensureIndexes(db: Db): Promise<void> {
         { key: { status: 1 } },
         { key: { createdAt: 1 } },
     ]);
+    await db.collection("api_keys").createIndexes([
+        { key: { keyHash: 1 }, unique: true },
+        { key: { createdAt: -1 } },
+        { key: { revokedAt: 1 } },
+    ]);
 }
 
 /**

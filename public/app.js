@@ -9,9 +9,21 @@ function toast(message, kind = "info") {
     setTimeout(() => el.remove(), 4000);
 }
 
+/**
+ * Prepend the configured API_PREFIX (`window.ZALO_AUTO.apiPrefix`) to data
+ * API paths. /admin/* paths stay at root because admin auth is intentionally
+ * un-versioned.
+ */
+function apiUrl(path) {
+    const prefix = (window.ZALO_AUTO && window.ZALO_AUTO.apiPrefix) || "";
+    if (!prefix) return path;
+    if (path.startsWith("/admin/")) return path;
+    return prefix + path;
+}
+
 /** Envelope-aware fetch wrapper. Redirects to /login.html on 401. */
 async function api(path, opts = {}) {
-    const res = await fetch(path, {
+    const res = await fetch(apiUrl(path), {
         headers: { "Content-Type": "application/json" },
         credentials: "same-origin",
         ...opts,

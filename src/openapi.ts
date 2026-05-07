@@ -1,3 +1,4 @@
+import { config } from "./config.js";
 import { groupedCatalog, METHOD_NAMES } from "./zalo/methodCatalog.js";
 
 /**
@@ -91,7 +92,14 @@ export const openapiSpec = {
             url: "https://zca-js.tdung.com/vi/apis/",
         },
     },
-    servers: [{ url: "/", description: "Same-origin" }],
+    servers: [
+        {
+            url: config.API_PREFIX || "/",
+            description: config.API_PREFIX
+                ? `Same-origin, mounted under ${config.API_PREFIX}`
+                : "Same-origin (no prefix)",
+        },
+    ],
     tags: [
         { name: "Admin", description: "Đăng nhập admin (UI cookie auth)" },
         { name: "Auth", description: "QR và token-based login (Zalo accounts)" },

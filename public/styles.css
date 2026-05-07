@@ -177,6 +177,30 @@ button.badge {
 button.badge:hover { filter: brightness(0.95); }
 .badge.listener-on { background: rgba(43, 182, 115, 0.15); color: var(--success); }
 .badge.listener-off { background: var(--bg); color: var(--muted); }
+.badge.expired { background: rgba(247, 181, 3, 0.15); color: #b07e00; }
+.badge.revoked { background: rgba(214, 51, 79, 0.12); color: var(--danger); }
+
+.warn-box {
+    background: rgba(247, 181, 3, 0.15);
+    border-left: 3px solid #f7b503;
+    color: #5e4c00;
+    padding: 12px 14px;
+    border-radius: 4px;
+    margin: 8px 0 16px;
+    font-size: 13px;
+    line-height: 1.5;
+}
+.key-view {
+    background: #1f2933;
+    color: #6df3a3;
+    padding: 12px 14px;
+    border-radius: 6px;
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: 13px;
+    word-break: break-all;
+    user-select: all;
+    margin: 0 0 12px;
+}
 
 button.copy-id {
     display: inline-flex;

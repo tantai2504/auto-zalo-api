@@ -18,8 +18,15 @@ function toast(msg, kind = "info") {
  * Throws on network errors and on `ok: false` payloads, with the envelope
  * attached to the error so callers can still show the structured response.
  */
+function apiUrl(path) {
+    const prefix = (window.ZALO_AUTO && window.ZALO_AUTO.apiPrefix) || "";
+    if (!prefix) return path;
+    if (path.startsWith("/admin/")) return path;
+    return prefix + path;
+}
+
 async function callApi(path, opts = {}) {
-    const res = await fetch(path, {
+    const res = await fetch(apiUrl(path), {
         headers: { "Content-Type": "application/json" },
         credentials: "same-origin",
         ...opts,
@@ -247,7 +254,7 @@ $("#copyCurlBtn").addEventListener("click", async () => {
     let parsed;
     try { parsed = JSON.parse(body); } catch { return toast("Body chưa hợp lệ", "error"); }
     const curl =
-        `curl -X POST '${location.origin}/api/${selectedAccountId}/${selectedMethod.name}' \\\n` +
+        `curl -X POST '${location.origin}${apiUrl(`/api/${selectedAccountId}/${selectedMethod.name}`)}' \\\n` +
         `  -H 'Content-Type: application/json' \\\n` +
         `  -d '${JSON.stringify(parsed)}'`;
     try {
