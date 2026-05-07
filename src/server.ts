@@ -13,6 +13,7 @@ import { apiRouter } from "./routes/api.js";
 import { methodsRouter } from "./routes/methods.js";
 import { quickRouter } from "./routes/quick.js";
 import { adminRouter } from "./routes/admin.js";
+import { apiKeysRouter } from "./routes/apiKeys.js";
 import { openapiSpec } from "./openapi.js";
 import { fail, ok as okEnvelope } from "./http/response.js";
 import {
@@ -80,6 +81,15 @@ async function main(): Promise<void> {
     // OpenAPI spec — public, cached for 1 hour.
     app.get("/openapi.json", cacheControl(3600), (_req, res) => res.json(openapiSpec));
 
+    // Runtime config for the UI (lets static pages know the API_PREFIX).
+    // Cached briefly — server restart picks up new env anyway.
+    app.get("/config.js", cacheControl(60), (_req, res) => {
+        res.type("application/javascript");
+        res.send(
+            `window.ZALO_AUTO = ${JSON.stringify({ apiPrefix: config.API_PREFIX })};`,
+        );
+    });
+
     // Swagger UI assets — public.
     app.use(
         "/docs",
@@ -91,15 +101,22 @@ async function main(): Promise<void> {
     );
 
     // ----- Admin auth (login/logout/me) — public for login itself ----
+    // Admin stays at root (/admin/login) so the UI doesn't have to know the
+    // API prefix to authenticate.
     app.use("/admin", makeRateLimiter(), adminRouter);
+    // API key management (admin-cookie protected internally).
+    app.use("/admin/api-keys", makeRateLimiter(), apiKeysRouter);
 
     // ----- Protected endpoints (rate-limited + admin cookie OR API_KEY) ---
+    // All data endpoints mount under config.API_PREFIX (default "" = root).
+    // Set API_PREFIX="/api/v1" in env to version everything.
+    const P = config.API_PREFIX;
     const guarded = [makeRateLimiter(), requireAuth];
-    app.use("/methods", cacheControl(300), ...guarded, methodsRouter);
-    app.use("/auth", ...guarded, authRouter);
-    app.use("/accounts", ...guarded, accountsRouter);
-    app.use("/quick", ...guarded, quickRouter);
-    app.use("/api", ...guarded, apiRouter);
+    app.use(`${P}/methods`, cacheControl(300), ...guarded, methodsRouter);
+    app.use(`${P}/auth`, ...guarded, authRouter);
+    app.use(`${P}/accounts`, ...guarded, accountsRouter);
+    app.use(`${P}/quick`, ...guarded, quickRouter);
+    app.use(`${P}/api`, ...guarded, apiRouter);
 
     // ----- Static UI --------------------------------------------------
     app.use(express.static(PUBLIC_DIR, { index: "index.html" }));
@@ -130,6 +147,7 @@ async function main(): Promise<void> {
                 port: config.PORT,
                 adminAuth: isAdminAuthEnabled(),
                 apiKey: !!config.API_KEY,
+                apiPrefix: config.API_PREFIX || "(root)",
                 rateLimit: config.RATE_LIMIT_MAX || "off",
                 keepAliveSec: config.KEEPALIVE_INTERVAL_SEC || "off",
             },
