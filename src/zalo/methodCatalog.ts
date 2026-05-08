@@ -20,6 +20,7 @@ export interface MethodEntry {
 const CATEGORIES: Record<string, string[]> = {
     Messaging: [
         "sendMessage",
+        "sendByPhone",
         "sendSticker",
         "sendVoice",
         "sendVideo",
@@ -83,9 +84,10 @@ const CATEGORIES: Record<string, string[]> = {
         "fetchAccountInfo",
         "getUserInfo",
         "getOwnId",
+        "findUser",
+        "findByPhone",
         "changeAccountAvatar",
         "updateProfile",
-        "findUser",
         "lastOnline",
     ],
     "Conversation Management": [

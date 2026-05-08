@@ -3,15 +3,32 @@ const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
 
 function toast(message, kind = "info") {
     const el = document.createElement("div");
-    el.className = `toast ${kind}`;
+    const palette = {
+        info: "bg-slate-800",
+        success: "bg-green-600",
+        error: "bg-red-600",
+    };
+    el.className = `${palette[kind] ?? palette.info} text-white px-4 py-2 rounded-md shadow-lg text-sm pointer-events-auto animate-fadeIn`;
     el.textContent = message;
     $("#toasts").appendChild(el);
     setTimeout(() => el.remove(), 4000);
 }
 
+/**
+ * Prepend the configured API_PREFIX (`window.ZALO_AUTO.apiPrefix`) to data
+ * API paths. /admin/* paths stay at root because admin auth is intentionally
+ * un-versioned.
+ */
+function apiUrl(path) {
+    const prefix = (window.ZALO_AUTO && window.ZALO_AUTO.apiPrefix) || "";
+    if (!prefix) return path;
+    if (path.startsWith("/admin/")) return path;
+    return prefix + path;
+}
+
 /** Envelope-aware fetch wrapper. Redirects to /login.html on 401. */
 async function api(path, opts = {}) {
-    const res = await fetch(path, {
+    const res = await fetch(apiUrl(path), {
         headers: { "Content-Type": "application/json" },
         credentials: "same-origin",
         ...opts,
@@ -88,15 +105,13 @@ function sessionBadge(accountId) {
         checking: "checking…",
         unknown: "—",
     }[s];
-    return `<span class="badge session-${s}">${label}</span>`;
-}
-
-function listenerCell(acc) {
-    const on = acc.listenerEnabled;
-    const wh = acc.webhookUrl ? "↗" : "";
-    return `<button class="badge listener-${on ? "on" : "off"}" data-action="toggle-listener" title="${
-        on ? "Listener ON — click để tắt" : "Listener OFF — click để bật"
-    }">${on ? "ON" : "OFF"}${wh ? ` ${wh}` : ""}</button>`;
+    const cls = {
+        online: "bg-green-100 text-green-700",
+        offline: "bg-red-100 text-red-700",
+        checking: "bg-amber-100 text-amber-700",
+        unknown: "bg-slate-100 text-slate-500",
+    }[s];
+    return `<span class="${cls} px-2 py-0.5 rounded text-xs font-semibold uppercase">${label}</span>`;
 }
 
 function renderAccounts(accounts) {
@@ -106,35 +121,43 @@ function renderAccounts(accounts) {
     for (const acc of accounts) {
         const tr = document.createElement("tr");
         tr.dataset.id = acc.id;
+        tr.className = "hover:bg-slate-50 transition-colors";
+        const statusBadge =
+            acc.status === "active"
+                ? '<span class="bg-green-100 text-green-700 px-2 py-0.5 rounded text-xs font-semibold uppercase">active</span>'
+                : '<span class="bg-red-100 text-red-700 px-2 py-0.5 rounded text-xs font-semibold uppercase">disabled</span>';
+        const ghostBtn = "px-2 py-1 text-xs border border-slate-300 hover:bg-slate-100 rounded transition-colors";
+        const dangerBtn = "px-2 py-1 text-xs bg-red-600 hover:bg-red-700 text-white rounded transition-colors";
         tr.innerHTML = `
-            <td class="contact-cell">
-                <div class="contact-name">${escapeHtml(acc.displayName ?? "—")}</div>
-                <div class="contact-phone">${escapeHtml(acc.phone ?? "—")}</div>
+            <td class="px-4 py-3">
+                <div class="font-medium text-slate-900">${escapeHtml(acc.displayName ?? "—")}</div>
+                <div class="text-xs text-slate-500 mt-0.5">${escapeHtml(acc.phone ?? "—")}</div>
             </td>
-            <td class="uid">
-                <button class="copy-id" data-action="copy-id" title="Click để copy: ${escapeHtml(acc.id)}">
-                    <span class="copy-text">${escapeHtml(shortUid(acc.id))}</span>
-                    <span class="copy-icon">⧉</span>
+            <td class="px-4 py-3">
+                <button data-action="copy-id" title="Click để copy: ${escapeHtml(acc.id)}"
+                    class="inline-flex items-center gap-1 px-2 py-1 text-xs font-mono bg-slate-50 hover:bg-primary-50 hover:text-primary-700 hover:border-primary-300 border border-slate-200 rounded transition-colors">
+                    <span>${escapeHtml(shortUid(acc.id))}</span>
+                    <span class="opacity-60">⧉</span>
                 </button>
             </td>
-            <td class="uid" title="${escapeHtml(acc.uid)}">${escapeHtml(shortUid(acc.uid))}</td>
-            <td><span class="badge ${acc.status}">${acc.status}</span></td>
-            <td class="session-cell">${sessionBadge(acc.id)}</td>
-            <td class="listener-cell">${listenerCell(acc)}</td>
-            <td class="actions">
-                <button class="ghost" data-action="check" title="Kiểm tra session">Check</button>
-                <button class="ghost" data-action="edit" title="Sửa thông tin / token / webhook">Sửa</button>
-                <button class="ghost" data-action="toggle" title="${acc.status === "active" ? "Tắt tài khoản" : "Bật tài khoản"}">${acc.status === "active" ? "Tắt" : "Bật"}</button>
-                <button class="danger" data-action="del" title="Xoá">Xoá</button>
+            <td class="px-4 py-3 font-mono text-xs text-slate-500" title="${escapeHtml(acc.uid)}">${escapeHtml(shortUid(acc.uid))}</td>
+            <td class="px-4 py-3">${statusBadge}</td>
+            <td class="px-4 py-3 session-cell">${sessionBadge(acc.id)}</td>
+            <td class="px-4 py-3 text-right">
+                <div class="inline-flex gap-1.5">
+                    <button class="${ghostBtn}" data-action="check">Check</button>
+                    <button class="${ghostBtn}" data-action="cookie">Cookie</button>
+                    <button class="${ghostBtn}" data-action="edit">Sửa</button>
+                    <button class="${ghostBtn}" data-action="toggle">${acc.status === "active" ? "Tắt" : "Bật"}</button>
+                    <button class="${dangerBtn}" data-action="del">Xoá</button>
+                </div>
             </td>
         `;
         tr.querySelector('[data-action="check"]').addEventListener("click", () => checkAcc(acc));
+        tr.querySelector('[data-action="cookie"]').addEventListener("click", () => openCookie(acc));
         tr.querySelector('[data-action="edit"]').addEventListener("click", () => openEdit(acc));
         tr.querySelector('[data-action="toggle"]').addEventListener("click", () => toggleAcc(acc));
         tr.querySelector('[data-action="del"]').addEventListener("click", () => deleteAcc(acc));
-        tr.querySelector('[data-action="toggle-listener"]').addEventListener("click", () =>
-            toggleListener(acc),
-        );
         tr.querySelector('[data-action="copy-id"]').addEventListener("click", () =>
             copyId(acc.id),
         );
@@ -155,22 +178,6 @@ async function copyId(id) {
         try { document.execCommand("copy"); toast(`Đã copy: ${id}`, "success"); }
         catch { toast("Không copy được — chọn thủ công", "error"); }
         ta.remove();
-    }
-}
-
-async function toggleListener(acc) {
-    const url = acc.listenerEnabled
-        ? `/accounts/${acc.id}/listener/stop`
-        : `/accounts/${acc.id}/listener/start`;
-    try {
-        await api(url, { method: "POST" });
-        toast(
-            `Listener ${acc.listenerEnabled ? "đã tắt" : "đã bật"} cho ${acc.displayName ?? acc.uid}`,
-            "success",
-        );
-        loadAccounts();
-    } catch (err) {
-        toast(err.message, "error");
     }
 }
 
@@ -253,7 +260,11 @@ async function deleteAcc(acc) {
 
 // ----- Edit modal ------------------------------------------------
 
+// Currently-open account in the edit modal (used by listener toggle in Event tab).
+let editingAcc = null;
+
 function openEdit(acc) {
+    editingAcc = acc;
     $("#editTitle").textContent = `Sửa: ${acc.displayName ?? acc.uid}`;
 
     // Info tab
@@ -270,7 +281,8 @@ function openEdit(acc) {
     tokenForm.z_uuid.value = "";
     tokenForm.zpw_sek.value = "";
 
-    // Webhook tab
+    // Event tab — listener badge + webhook form
+    renderListenerToggle(acc);
     const webhookForm = $("#webhookForm");
     webhookForm.id.value = acc.id;
     webhookForm.webhookUrl.value = acc.webhookUrl ?? "";
@@ -284,10 +296,103 @@ function openEdit(acc) {
     $("#modal").classList.remove("hidden");
 }
 
+function renderListenerToggle(acc) {
+    const badge = $("#listenerBadge");
+    const btn = $("#listenerToggleBtn");
+    if (acc.listenerEnabled) {
+        badge.className = "px-2 py-0.5 rounded text-xs font-semibold uppercase bg-green-100 text-green-700";
+        badge.textContent = "ON";
+        btn.textContent = "Tắt listener";
+    } else {
+        badge.className = "px-2 py-0.5 rounded text-xs font-semibold uppercase bg-slate-100 text-slate-500";
+        badge.textContent = "OFF";
+        btn.textContent = "Bật listener";
+    }
+}
+
+$("#listenerToggleBtn").addEventListener("click", async () => {
+    if (!editingAcc) return;
+    const url = editingAcc.listenerEnabled
+        ? `/accounts/${editingAcc.id}/listener/stop`
+        : `/accounts/${editingAcc.id}/listener/start`;
+    const btn = $("#listenerToggleBtn");
+    btn.disabled = true;
+    try {
+        const updated = await api(url, { method: "POST" });
+        editingAcc = updated;
+        renderListenerToggle(updated);
+        toast(`Listener ${updated.listenerEnabled ? "đã bật" : "đã tắt"}`, "success");
+        loadAccounts();
+    } catch (err) {
+        toast(err.message, "error");
+    } finally {
+        btn.disabled = false;
+    }
+});
+
+// ----- Cookie viewer modal -----------------------------------------
+
+async function openCookie(acc) {
+    $("#cookieAcc").textContent = acc.displayName ?? acc.uid;
+    $("#cookieSnapshot").textContent = "Đang tải…";
+    $("#cookieFull").textContent = "Đang tải…";
+    $("#cookieModal").classList.remove("hidden");
+    try {
+        const data = await api(`/accounts/${acc.id}/credentials`);
+        const c = data.credentials;
+        const snapshot = c.cookieSnapshot ?? {};
+        $("#cookieSnapshot").textContent = JSON.stringify({
+            zpw_sek: snapshot.zpw_sek ?? "(không có)",
+            zpw_enk: snapshot.zpw_enk ?? "(không có)",
+            app: snapshot.app ?? "(không có)",
+            imei: c.imei,
+            uid: c.uid,
+            secretKey: c.secretKey,
+            userAgent: c.userAgent,
+        }, null, 2);
+        $("#cookieFull").textContent = JSON.stringify(c, null, 2);
+        $("#copyCookieBtn").dataset.payload = JSON.stringify(c, null, 2);
+        $("#copyZpwSekBtn").dataset.payload = snapshot.zpw_sek ?? "";
+    } catch (err) {
+        $("#cookieSnapshot").textContent = `Lỗi: ${err.message}`;
+        $("#cookieFull").textContent = "";
+    }
+}
+
+$("#cancelCookie").addEventListener("click", () => $("#cookieModal").classList.add("hidden"));
+
+$("#copyCookieBtn").addEventListener("click", async () => {
+    const payload = $("#copyCookieBtn").dataset.payload ?? "";
+    try {
+        await navigator.clipboard.writeText(payload);
+        toast("Đã copy full credentials", "success");
+    } catch {
+        toast("Không copy được", "error");
+    }
+});
+
+$("#copyZpwSekBtn").addEventListener("click", async () => {
+    const payload = $("#copyZpwSekBtn").dataset.payload ?? "";
+    if (!payload) return toast("Account chưa có zpw_sek", "error");
+    try {
+        await navigator.clipboard.writeText(payload);
+        toast("Đã copy zpw_sek", "success");
+    } catch {
+        toast("Không copy được", "error");
+    }
+});
+
 function switchEditTab(name) {
-    $$("[data-edit-tab]").forEach((t) =>
-        t.classList.toggle("active", t.dataset.editTab === name),
-    );
+    const activeCls = ["border-primary-600", "text-primary-600"];
+    const inactiveCls = ["border-transparent", "text-slate-500", "hover:text-slate-900"];
+    $$("[data-edit-tab]").forEach((t) => {
+        const isActive = t.dataset.editTab === name;
+        t.classList.toggle("border-primary-600", isActive);
+        t.classList.toggle("text-primary-600", isActive);
+        t.classList.toggle("border-transparent", !isActive);
+        t.classList.toggle("text-slate-500", !isActive);
+        t.classList.toggle("hover:text-slate-900", !isActive);
+    });
     $$("[data-edit-panel]").forEach((p) =>
         p.classList.toggle("hidden", p.dataset.editPanel !== name),
     );

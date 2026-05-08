@@ -177,6 +177,71 @@ button.badge {
 button.badge:hover { filter: brightness(0.95); }
 .badge.listener-on { background: rgba(43, 182, 115, 0.15); color: var(--success); }
 .badge.listener-off { background: var(--bg); color: var(--muted); }
+.badge.expired { background: rgba(247, 181, 3, 0.15); color: #b07e00; }
+.badge.revoked { background: rgba(214, 51, 79, 0.12); color: var(--danger); }
+
+.subhead {
+    margin: 14px 0 6px;
+    font-size: 13px;
+    text-transform: uppercase;
+    color: var(--muted);
+    letter-spacing: 0.04em;
+}
+.subhead:first-child { margin-top: 0; }
+.modal-divider {
+    border: none;
+    border-top: 1px solid var(--border);
+    margin: 16px 0;
+}
+.listener-toggle {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    background: var(--bg);
+    border-radius: 6px;
+    margin: 8px 0;
+    font-size: 13px;
+}
+.listener-toggle button { margin-left: auto; padding: 5px 12px; font-size: 12px; }
+
+.code-block {
+    background: #1f2933;
+    color: #e4ecf7;
+    padding: 14px 16px;
+    border-radius: 6px;
+    overflow-x: auto;
+    font-size: 12px;
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    line-height: 1.6;
+    margin: 0 0 12px;
+    white-space: pre-wrap;
+    word-break: break-word;
+    max-height: 320px;
+    overflow-y: auto;
+}
+
+.warn-box {
+    background: rgba(247, 181, 3, 0.15);
+    border-left: 3px solid #f7b503;
+    color: #5e4c00;
+    padding: 12px 14px;
+    border-radius: 4px;
+    margin: 8px 0 16px;
+    font-size: 13px;
+    line-height: 1.5;
+}
+.key-view {
+    background: #1f2933;
+    color: #6df3a3;
+    padding: 12px 14px;
+    border-radius: 6px;
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: 13px;
+    word-break: break-all;
+    user-select: all;
+    margin: 0 0 12px;
+}
 
 button.copy-id {
     display: inline-flex;

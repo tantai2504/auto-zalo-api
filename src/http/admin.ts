@@ -2,6 +2,9 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 import type { Request, RequestHandler, Response } from "express";
 import { config } from "../config.js";
 import { fail } from "./response.js";
+import { validateDbApiKey } from "./apiKeyAuth.js";
+import { looksLikeSessionToken, verifySessionToken } from "./sessionToken.js";
+import type { ApiKeyDoc } from "../db/apiKeys.js";
 
 /**
  * Lightweight admin session built on a signed cookie — no DB, no extra deps.
@@ -77,35 +80,102 @@ export function hasAdminSession(req: Request): SessionPayload | null {
     return verifyToken(token, config.SESSION_SECRET!);
 }
 
-/** True if request carries a valid API_KEY (Bearer or X-API-Key). */
-export function hasValidApiKey(req: Request): boolean {
-    const expected = config.API_KEY;
-    if (!expected) return false;
+/** Pull a bearer/api-key string out of the request headers. Returns "" if none. */
+export function extractApiKey(req: Request): string {
     const headerAuth = req.header("authorization") ?? "";
     const headerKey = req.header("x-api-key") ?? "";
     const bearer = headerAuth.startsWith("Bearer ")
         ? headerAuth.slice("Bearer ".length).trim()
         : "";
-    return (
-        (!!bearer && constantTimeStringEq(bearer, expected)) ||
-        (!!headerKey && constantTimeStringEq(headerKey, expected))
-    );
+    return bearer || headerKey;
+}
+
+/** True if the request carries a valid env-level master API_KEY. */
+export function hasMasterApiKey(req: Request): boolean {
+    const expected = config.API_KEY;
+    if (!expected) return false;
+    const raw = extractApiKey(req);
+    if (!raw) return false;
+    return constantTimeStringEq(raw, expected);
+}
+
+/**
+ * Validate a request's API key/session-token against:
+ *   1. Session token   — HMAC verify, no DB (fast path, ~0.1ms)
+ *   2. Env master key  — constant-time string compare
+ *   3. DB-stored key   — SHA-256 lookup, cached 60s
+ *
+ * Returns a marker object describing the source, or null if no valid auth.
+ */
+export async function validateRequestApiKey(
+    req: Request,
+): Promise<
+    | { source: "session"; sub: string }
+    | { source: "env" }
+    | { source: "db"; keyDoc: ApiKeyDoc }
+    | null
+> {
+    const raw = extractApiKey(req);
+    if (!raw) return null;
+    // 1. Session token first — cheapest check, no DB.
+    if (looksLikeSessionToken(raw)) {
+        const payload = verifySessionToken(raw);
+        if (payload) return { source: "session", sub: payload.sub };
+        // Falls through — maybe it's still a base64-ish API key without zk_ prefix.
+    }
+    // 2. Env master key.
+    if (config.API_KEY && constantTimeStringEq(raw, config.API_KEY)) {
+        return { source: "env" };
+    }
+    // 3. DB-stored API key.
+    const keyDoc = await validateDbApiKey(raw);
+    if (keyDoc) return { source: "db", keyDoc };
+    return null;
+}
+
+/** Backwards-compat sync helper used by the WebSocket upgrade path. */
+export function hasValidApiKey(req: Request): boolean {
+    return hasMasterApiKey(req);
 }
 
 /**
  * Auth middleware accepted by every protected route.
- * Allows the request through if EITHER admin cookie OR API_KEY is valid.
- * If neither admin auth nor API_KEY are configured, the system is open (dev).
+ * Allows the request through if ANY of these are valid:
+ *   1. Admin session cookie (set by /admin/login)
+ *   2. Env master API_KEY (Bearer or X-API-Key header)
+ *   3. Active DB-stored API key (Bearer or X-API-Key) — has expiry + revoke
+ *
+ * If neither admin auth NOR env API_KEY are configured, the system is open
+ * (dev mode). DB keys alone don't activate auth — the admin must set up
+ * either env-key bootstrap or admin login first.
  */
-export const requireAuth: RequestHandler = (req, res, next) => {
+export const requireAuth: RequestHandler = async (req, res, next) => {
     const adminEnabled = isAdminAuthEnabled();
-    const apiKeyEnabled = !!config.API_KEY;
-    if (!adminEnabled && !apiKeyEnabled) return next();
+    const envKeyEnabled = !!config.API_KEY;
+    if (!adminEnabled && !envKeyEnabled) return next();
 
     if (adminEnabled && hasAdminSession(req)) return next();
-    if (apiKeyEnabled && hasValidApiKey(req)) return next();
+
+    const apiAuth = await validateRequestApiKey(req);
+    if (apiAuth) {
+        // Stash on req for downstream handlers (audit logging, etc.)
+        (req as Request & { apiAuth?: typeof apiAuth }).apiAuth = apiAuth;
+        return next();
+    }
 
     fail(res, "UNAUTHORIZED", "Authentication required");
+};
+
+/** Stricter middleware: admin cookie ONLY (used for managing API keys themselves). */
+export const requireAdminCookie: RequestHandler = (req, res, next) => {
+    if (!isAdminAuthEnabled()) {
+        // If admin is unconfigured, only the env master API_KEY can manage keys
+        // — otherwise anyone could bootstrap themselves into the system.
+        if (hasMasterApiKey(req)) return next();
+        return fail(res, "UNAUTHORIZED", "Admin auth is not configured");
+    }
+    if (hasAdminSession(req)) return next();
+    fail(res, "UNAUTHORIZED", "Admin cookie required");
 };
 
 /** Login: validate creds, set HTTP-only signed cookie. */

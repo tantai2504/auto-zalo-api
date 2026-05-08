@@ -3,7 +3,6 @@ import { dirname, resolve } from "node:path";
 import cookieParser from "cookie-parser";
 import express from "express";
 import { pinoHttp } from "pino-http";
-import swaggerUi from "swagger-ui-express";
 import { config } from "./config.js";
 import { logger } from "./logger.js";
 import { connectDb, closeDb, pingDb, startQrCleanupLoop, stopQrCleanupLoop } from "./db/index.js";
@@ -11,9 +10,8 @@ import { authRouter } from "./routes/auth.js";
 import { accountsRouter } from "./routes/accounts.js";
 import { apiRouter } from "./routes/api.js";
 import { methodsRouter } from "./routes/methods.js";
-import { quickRouter } from "./routes/quick.js";
 import { adminRouter } from "./routes/admin.js";
-import { openapiSpec } from "./openapi.js";
+import { apiKeysRouter } from "./routes/apiKeys.js";
 import { fail, ok as okEnvelope } from "./http/response.js";
 import {
     corsMiddleware,
@@ -62,6 +60,22 @@ async function main(): Promise<void> {
     app.use(express.json({ limit: "10mb" }));
     app.use(pinoHttp({ logger }));
 
+    // Global request timeout — Cloudflare cuts at ~100s and returns 502 to the
+    // client even if our handler is still running. Force a 60s ceiling so we
+    // can fail with a proper envelope before that happens.
+    app.use((req, res, next) => {
+        const TIMEOUT_MS = 60_000;
+        const timer = setTimeout(() => {
+            if (!res.headersSent) {
+                fail(res, "INTERNAL_ERROR", "Request quá 60s — server bỏ cuộc");
+            }
+        }, TIMEOUT_MS);
+        timer.unref?.();
+        res.on("finish", () => clearTimeout(timer));
+        res.on("close", () => clearTimeout(timer));
+        next();
+    });
+
     // ----- Public endpoints (no auth required) -----------------------
     app.get("/health", async (_req, res) => {
         const dbUp = await pingDb();
@@ -77,29 +91,45 @@ async function main(): Promise<void> {
         okEnvelope(res, data);
     });
 
-    // OpenAPI spec — public, cached for 1 hour.
-    app.get("/openapi.json", cacheControl(3600), (_req, res) => res.json(openapiSpec));
-
-    // Swagger UI assets — public.
-    app.use(
-        "/docs",
-        swaggerUi.serve,
-        swaggerUi.setup(openapiSpec, {
-            customSiteTitle: "zalo-auto API docs",
-            swaggerOptions: { docExpansion: "list", filter: true, persistAuthorization: true },
-        }),
-    );
+    // Runtime config for the UI (lets static pages know the API_PREFIX).
+    // Cached briefly — server restart picks up new env anyway.
+    app.get("/config.js", cacheControl(60), (_req, res) => {
+        res.type("application/javascript");
+        res.send(
+            `window.ZALO_AUTO = ${JSON.stringify({ apiPrefix: config.API_PREFIX })};`,
+        );
+    });
 
     // ----- Admin auth (login/logout/me) — public for login itself ----
+    // Admin stays at root (/admin/login) so the UI doesn't have to know the
+    // API prefix to authenticate.
     app.use("/admin", makeRateLimiter(), adminRouter);
+    // API key management (admin-cookie protected internally).
+    app.use("/admin/api-keys", makeRateLimiter(), apiKeysRouter);
 
-    // ----- Protected endpoints (rate-limited + admin cookie OR API_KEY) ---
+    // ----- Routes -----
+    // All data endpoints mount under config.API_PREFIX (default "" = root).
+    // Set API_PREFIX="/api/v1" in env to version everything.
+    //
+    // Auth model:
+    //   - Management endpoints (/auth, /accounts, /methods) → admin cookie required.
+    //     Used by the dashboard UI to add/list/edit accounts.
+    //   - Data endpoints (/api/{accountId}/*, /quick/{accountId}/*) → OPEN.
+    //     The accountId UUID itself is the credential — anyone who knows it
+    //     can call methods on that account. Keep the UUID secret.
+    //
+    // Both groups still go through the rate limiter to mitigate brute-force
+    // and abuse. If you need stricter protection, put the whole service behind
+    // a reverse proxy with IP allowlist or basic auth.
+    const P = config.API_PREFIX;
     const guarded = [makeRateLimiter(), requireAuth];
-    app.use("/methods", cacheControl(300), ...guarded, methodsRouter);
-    app.use("/auth", ...guarded, authRouter);
-    app.use("/accounts", ...guarded, accountsRouter);
-    app.use("/quick", ...guarded, quickRouter);
-    app.use("/api", ...guarded, apiRouter);
+    app.use(`${P}/methods`, cacheControl(300), ...guarded, methodsRouter);
+    app.use(`${P}/auth`, ...guarded, authRouter);
+    app.use(`${P}/accounts`, ...guarded, accountsRouter);
+
+    // Data endpoints — only rate-limited, no auth. accountId in URL = credential.
+    const open = [makeRateLimiter()];
+    app.use(`${P}/api`, ...open, apiRouter);
 
     // ----- Static UI --------------------------------------------------
     app.use(express.static(PUBLIC_DIR, { index: "index.html" }));
@@ -130,6 +160,7 @@ async function main(): Promise<void> {
                 port: config.PORT,
                 adminAuth: isAdminAuthEnabled(),
                 apiKey: !!config.API_KEY,
+                apiPrefix: config.API_PREFIX || "(root)",
                 rateLimit: config.RATE_LIMIT_MAX || "off",
                 keepAliveSec: config.KEEPALIVE_INTERVAL_SEC || "off",
             },

@@ -1,10 +1,51 @@
 import "dotenv/config";
 import { z } from "zod";
 
+/**
+ * dotenv parses `FOO=` (no value) as the empty string, not undefined. That
+ * makes plain `.optional()` ineffective — the empty string still flunks
+ * `.min()` checks. Wrap optional string vars with this so blanks are treated
+ * as "unset" and the field genuinely opts out.
+ */
+function optionalStr(min = 1) {
+    return z.preprocess(
+        (v) => (typeof v === "string" && v.trim().length === 0 ? undefined : v),
+        z.string().min(min).optional(),
+    );
+}
+
+/**
+ * Normalise an API path prefix. Allows `/api/v1`, `api/v1`, `/api/v1/` —
+ * always returns `/api/v1` (leading slash, no trailing slash). Empty → "".
+ */
+function normalisePrefix(input: string | undefined): string {
+    const s = (input ?? "").trim();
+    if (!s) return "";
+    let out = s.startsWith("/") ? s : "/" + s;
+    if (out.endsWith("/")) out = out.slice(0, -1);
+    return out;
+}
+
 const schema = z.object({
     // --- HTTP server -----------------------------------------------------
     PORT: z.coerce.number().int().positive().default(3000),
     HOST: z.string().default("0.0.0.0"),
+
+    /**
+     * Path prefix mounted in front of every REST endpoint
+     * (auth/accounts/quick/api/methods + WebSocket /events).
+     * UI pages, /admin/login, /docs, /openapi.json, /health stay at root so
+     * the dashboard keeps working regardless of API versioning.
+     *
+     * Examples:
+     *   API_PREFIX=                  → /accounts        /api/{id}/{method}
+     *   API_PREFIX=/v1               → /v1/accounts     /v1/api/{id}/{method}
+     *   API_PREFIX=/api/v1           → /api/v1/accounts /api/v1/api/{id}/{method}
+     */
+    API_PREFIX: z.preprocess(
+        (v) => normalisePrefix(v as string | undefined),
+        z.string().default(""),
+    ),
 
     // --- MongoDB ---------------------------------------------------------
     MONGO_URI: z.string().default("mongodb://localhost:27017"),
@@ -22,24 +63,26 @@ const schema = z.object({
 
     // --- Auth ------------------------------------------------------------
     /**
-     * Optional API key for programmatic access. Sent as `Authorization: Bearer <key>`
-     * or `X-API-Key: <key>`. Independent of admin (cookie) auth — either is enough.
+     * Optional API key for programmatic access. Sent as
+     * `Authorization: Bearer <key>` or `X-API-Key: <key>`. Independent of
+     * admin (cookie) auth — either is enough. Leave blank to disable.
      */
-    API_KEY: z.string().min(1).optional(),
+    API_KEY: optionalStr(1),
 
     /**
      * Admin auth (UI). If both username + password are set, UI pages and all
-     * protected endpoints require either an admin session cookie OR a valid API_KEY.
-     * Leave empty to disable auth (open dev mode).
+     * protected endpoints require either an admin session cookie OR a valid
+     * API_KEY. Leave empty to disable auth (open dev mode).
      */
-    ADMIN_USERNAME: z.string().min(1).optional(),
-    ADMIN_PASSWORD: z.string().min(1).optional(),
+    ADMIN_USERNAME: optionalStr(1),
+    ADMIN_PASSWORD: optionalStr(1),
 
     /**
-     * HMAC secret for signing the admin session cookie. Required if admin auth is on.
-     * Generate: node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+     * HMAC secret for signing the admin session cookie. Required if admin
+     * auth is on. Generate:
+     *   node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
      */
-    SESSION_SECRET: z.string().min(16).optional(),
+    SESSION_SECRET: optionalStr(16),
 
     /** Admin session cookie lifetime (seconds). Default 7 days. */
     SESSION_TTL_SEC: z.coerce.number().int().positive().default(7 * 24 * 60 * 60),

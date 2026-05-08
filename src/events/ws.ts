@@ -3,7 +3,8 @@ import type { Socket } from "node:net";
 import { WebSocket, WebSocketServer } from "ws";
 import { config } from "../config.js";
 import { logger } from "../logger.js";
-import { hasAdminSession, hasValidApiKey } from "../http/admin.js";
+import { hasAdminSession, validateRequestApiKey } from "../http/admin.js";
+import { validateDbApiKey } from "../http/apiKeyAuth.js";
 import { eventBus, type ZaloBusEvent } from "./bus.js";
 import { noteSubscribe, noteUnsubscribe } from "./orchestrator.js";
 
@@ -46,13 +47,17 @@ export function attachWebSocketServer(server: Server): void {
 
     server.on("upgrade", (req, socket, head) => {
         if (!isEventsPath(req.url)) return;
-        if (!isAuthorized(req)) {
-            socket.write("HTTP/1.1 401 Unauthorized\r\n\r\n");
-            socket.destroy();
-            return;
-        }
-        wss!.handleUpgrade(req, socket as Socket, head, (ws) => {
-            wss!.emit("connection", ws, req);
+        // isAuthorized is async because it may consult MongoDB for DB-stored
+        // API keys. We hold the upgrade handshake until validation finishes.
+        void isAuthorized(req).then((authorised) => {
+            if (!authorised) {
+                socket.write("HTTP/1.1 401 Unauthorized\r\n\r\n");
+                socket.destroy();
+                return;
+            }
+            wss!.handleUpgrade(req, socket as Socket, head, (ws) => {
+                wss!.emit("connection", ws, req);
+            });
         });
     });
 
@@ -98,10 +103,12 @@ export function attachWebSocketServer(server: Server): void {
 
 function isEventsPath(url: string | undefined): boolean {
     if (!url) return false;
-    return url.split("?")[0] === "/events";
+    const path = url.split("?")[0];
+    // Accept both root /events and the prefixed variant (e.g. /api/v1/events)
+    return path === "/events" || path === `${config.API_PREFIX}/events`;
 }
 
-function isAuthorized(req: IncomingMessage): boolean {
+async function isAuthorized(req: IncomingMessage): Promise<boolean> {
     const reqLike = {
         cookies: parseCookies(req.headers.cookie ?? ""),
         header(name: string) {
@@ -110,15 +117,23 @@ function isAuthorized(req: IncomingMessage): boolean {
         },
     } as unknown as Parameters<typeof hasAdminSession>[0];
 
+    // 1) Admin cookie
     if (hasAdminSession(reqLike)) return true;
-    if (hasValidApiKey(reqLike)) return true;
-
+    // 2) Header-based API key (env master OR DB-stored)
+    const apiAuth = await validateRequestApiKey(reqLike as never);
+    if (apiAuth) return true;
+    // 3) ?api_key=... query param (browsers can't set custom headers on WS)
     const url = req.url ?? "";
     const qIdx = url.indexOf("?");
-    if (config.API_KEY && qIdx >= 0) {
-        const params = new URLSearchParams(url.slice(qIdx + 1));
-        if (params.get("api_key") === config.API_KEY) return true;
+    if (qIdx >= 0) {
+        const queryKey = new URLSearchParams(url.slice(qIdx + 1)).get("api_key");
+        if (queryKey) {
+            if (config.API_KEY && queryKey === config.API_KEY) return true;
+            const dbDoc = await validateDbApiKey(queryKey);
+            if (dbDoc) return true;
+        }
     }
+    // 4) If no auth is configured at all, allow (dev mode parity with REST)
     if (!config.API_KEY && !config.ADMIN_USERNAME) return true;
     return false;
 }
