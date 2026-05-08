@@ -4,7 +4,8 @@ import { getAccountById } from "../db/accounts.js";
 import { sessions } from "../zalo/manager.js";
 import { fail, failFromError, failValidation, ok } from "../http/response.js";
 import { loadSignatures } from "../zalo/parseSignatures.js";
-import { findByPhone, sendByPhone } from "../zalo/contacts.js";
+import { findByPhone, listGroups, sendByPhone } from "../zalo/contacts.js";
+import { queryMessages } from "../db/messages.js";
 
 export const apiRouter: Router = Router();
 
@@ -17,7 +18,7 @@ export const apiRouter: Router = Router();
  * appear in the docs alongside the real methods.
  */
 type ZaloApi = Parameters<typeof findByPhone>[0];
-type Handler = (api: ZaloApi, args: unknown[]) => Promise<unknown>;
+type Handler = (api: ZaloApi, args: unknown[], accountId: string) => Promise<unknown>;
 
 const VIRTUAL_METHODS: Record<string, { paramNames: string[]; handler: Handler }> = {
     findByPhone: {
@@ -31,6 +32,26 @@ const VIRTUAL_METHODS: Record<string, { paramNames: string[]; handler: Handler }
                 phone: String(args[0] ?? ""),
                 message: args[1] as string | Record<string, unknown>,
             }),
+    },
+    listGroups: {
+        paramNames: [],
+        handler: (api) => listGroups(api as unknown as Parameters<typeof listGroups>[0]),
+    },
+    getMessages: {
+        paramNames: ["threadId", "threadType", "limit", "since", "before", "order"],
+        handler: async (_api, args, accountId) => {
+            const [threadId, threadType, limit, since, before, order] = args;
+            return queryMessages({
+                accountId,
+                threadId: typeof threadId === "string" && threadId ? threadId : undefined,
+                threadType:
+                    threadType === 0 || threadType === 1 ? (threadType as 0 | 1) : undefined,
+                limit: typeof limit === "number" ? limit : undefined,
+                since: typeof since === "number" ? since : undefined,
+                before: typeof before === "number" ? before : undefined,
+                order: order === "asc" ? "asc" : order === "desc" ? "desc" : undefined,
+            });
+        },
     },
 };
 
@@ -84,7 +105,7 @@ apiRouter.post("/:accountId/:method", async (req, res) => {
         const api = await sessions.get(account.id);
         const virtual = VIRTUAL_METHODS[params.data.method];
         if (virtual) {
-            const result = await virtual.handler(api as ZaloApi, transformed);
+            const result = await virtual.handler(api as ZaloApi, transformed, account.id);
             ok(res, result, 200, started);
             return;
         }

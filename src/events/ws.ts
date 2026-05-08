@@ -103,9 +103,7 @@ export function attachWebSocketServer(server: Server): void {
 
 function isEventsPath(url: string | undefined): boolean {
     if (!url) return false;
-    const path = url.split("?")[0];
-    // Accept both root /events and the prefixed variant (e.g. /api/v1/events)
-    return path === "/events" || path === `${config.API_PREFIX}/events`;
+    return url.split("?")[0] === "/events";
 }
 
 async function isAuthorized(req: IncomingMessage): Promise<boolean> {

@@ -29,6 +29,7 @@ import {
 } from "./zalo/manager.js";
 import { attachWebSocketServer } from "./events/ws.js";
 import { startWebhookDispatcher } from "./events/webhook.js";
+import { startMessageStore } from "./events/messageStore.js";
 import { isPinned } from "./events/orchestrator.js";
 
 const PUBLIC_DIR = resolve(dirname(fileURLToPath(import.meta.url)), "../public");
@@ -91,45 +92,24 @@ async function main(): Promise<void> {
         okEnvelope(res, data);
     });
 
-    // Runtime config for the UI (lets static pages know the API_PREFIX).
-    // Cached briefly — server restart picks up new env anyway.
-    app.get("/config.js", cacheControl(60), (_req, res) => {
-        res.type("application/javascript");
-        res.send(
-            `window.ZALO_AUTO = ${JSON.stringify({ apiPrefix: config.API_PREFIX })};`,
-        );
-    });
-
     // ----- Admin auth (login/logout/me) — public for login itself ----
-    // Admin stays at root (/admin/login) so the UI doesn't have to know the
-    // API prefix to authenticate.
     app.use("/admin", makeRateLimiter(), adminRouter);
     // API key management (admin-cookie protected internally).
     app.use("/admin/api-keys", makeRateLimiter(), apiKeysRouter);
 
     // ----- Routes -----
-    // All data endpoints mount under config.API_PREFIX (default "" = root).
-    // Set API_PREFIX="/api/v1" in env to version everything.
-    //
     // Auth model:
     //   - Management endpoints (/auth, /accounts, /methods) → admin cookie required.
-    //     Used by the dashboard UI to add/list/edit accounts.
-    //   - Data endpoints (/api/{accountId}/*, /quick/{accountId}/*) → OPEN.
-    //     The accountId UUID itself is the credential — anyone who knows it
-    //     can call methods on that account. Keep the UUID secret.
-    //
-    // Both groups still go through the rate limiter to mitigate brute-force
-    // and abuse. If you need stricter protection, put the whole service behind
-    // a reverse proxy with IP allowlist or basic auth.
-    const P = config.API_PREFIX;
+    //   - Data endpoints (/api/{accountId}/*) → OPEN, accountId UUID is the credential.
+    // Both go through the rate limiter to mitigate brute-force / abuse.
     const guarded = [makeRateLimiter(), requireAuth];
-    app.use(`${P}/methods`, cacheControl(300), ...guarded, methodsRouter);
-    app.use(`${P}/auth`, ...guarded, authRouter);
-    app.use(`${P}/accounts`, ...guarded, accountsRouter);
+    app.use("/methods", cacheControl(300), ...guarded, methodsRouter);
+    app.use("/auth", ...guarded, authRouter);
+    app.use("/accounts", ...guarded, accountsRouter);
 
     // Data endpoints — only rate-limited, no auth. accountId in URL = credential.
     const open = [makeRateLimiter()];
-    app.use(`${P}/api`, ...open, apiRouter);
+    app.use("/api", ...open, apiRouter);
 
     // ----- Static UI --------------------------------------------------
     app.use(express.static(PUBLIC_DIR, { index: "index.html" }));
@@ -160,7 +140,6 @@ async function main(): Promise<void> {
                 port: config.PORT,
                 adminAuth: isAdminAuthEnabled(),
                 apiKey: !!config.API_KEY,
-                apiPrefix: config.API_PREFIX || "(root)",
                 rateLimit: config.RATE_LIMIT_MAX || "off",
                 keepAliveSec: config.KEEPALIVE_INTERVAL_SEC || "off",
             },
@@ -171,6 +150,7 @@ async function main(): Promise<void> {
     // Realtime fanout — listener attaches lazily when a consumer arrives
     // (WebSocket subscribe OR a configured webhook URL).
     attachWebSocketServer(server);
+    startMessageStore();
     void startWebhookDispatcher();
     startKeepAliveLoop();
     startIdleEvictionLoop(isPinned);

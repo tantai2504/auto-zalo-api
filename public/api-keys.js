@@ -68,12 +68,6 @@ $("#logoutBtn").addEventListener("click", async (ev) => {
     location.href = "/login.html";
 });
 
-// ----- Prefix display in usage box --------------------------------
-
-const prefix = (window.ZALO_AUTO && window.ZALO_AUTO.apiPrefix) || "";
-$("#prefixDemo").textContent = prefix;
-$("#prefixDemo2").textContent = prefix;
-
 // ----- Load list -------------------------------------------------
 
 async function loadKeys() {

@@ -49,6 +49,13 @@ async function ensureIndexes(db: Db): Promise<void> {
         { key: { createdAt: -1 } },
         { key: { revokedAt: 1 } },
     ]);
+    await db.collection("messages").createIndexes([
+        { key: { accountId: 1, msgId: 1 }, unique: true },
+        { key: { accountId: 1, threadId: 1, ts: -1 } },
+        { key: { accountId: 1, ts: -1 } },
+        // TTL — auto-delete after 30 days so the collection stays bounded.
+        { key: { receivedAt: 1 }, expireAfterSeconds: 30 * 86400 },
+    ]);
 }
 
 /**

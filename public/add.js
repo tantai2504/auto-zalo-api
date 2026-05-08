@@ -13,15 +13,8 @@ function toast(message, kind = "info") {
     setTimeout(() => el.remove(), 4000);
 }
 
-function apiUrl(path) {
-    const prefix = (window.ZALO_AUTO && window.ZALO_AUTO.apiPrefix) || "";
-    if (!prefix) return path;
-    if (path.startsWith("/admin/")) return path;
-    return prefix + path;
-}
-
 async function api(path, opts = {}) {
-    const res = await fetch(apiUrl(path), {
+    const res = await fetch(path, {
         headers: { "Content-Type": "application/json" },
         credentials: "same-origin",
         ...opts,

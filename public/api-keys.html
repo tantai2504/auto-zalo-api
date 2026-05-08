@@ -6,7 +6,6 @@
     <title>API Keys — Zalo Auto</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="/tailwind-init.js"></script>
-    <script src="/config.js"></script>
     <script src="/auth-guard.js"></script>
 </head>
 <body class="min-h-screen bg-slate-50 text-slate-900 font-sans">
@@ -60,11 +59,11 @@
             <h2 class="text-base font-semibold mb-2">Cách dùng</h2>
             <p class="text-sm text-slate-500 mb-3">Gắn key vào header request:</p>
             <pre class="bg-slate-900 text-slate-100 p-4 rounded-md text-xs font-mono overflow-x-auto"><code>curl -H 'X-API-Key: zk_xxx...' \
-  https://your.host<span id="prefixDemo"></span>/accounts
+  https://your.host/accounts
 
 # Hoặc Bearer
 curl -H 'Authorization: Bearer zk_xxx...' \
-  https://your.host<span id="prefixDemo2"></span>/accounts</code></pre>
+  https://your.host/accounts</code></pre>
         </section>
     </main>
 

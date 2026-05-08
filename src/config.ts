@@ -14,38 +14,10 @@ function optionalStr(min = 1) {
     );
 }
 
-/**
- * Normalise an API path prefix. Allows `/api/v1`, `api/v1`, `/api/v1/` —
- * always returns `/api/v1` (leading slash, no trailing slash). Empty → "".
- */
-function normalisePrefix(input: string | undefined): string {
-    const s = (input ?? "").trim();
-    if (!s) return "";
-    let out = s.startsWith("/") ? s : "/" + s;
-    if (out.endsWith("/")) out = out.slice(0, -1);
-    return out;
-}
-
 const schema = z.object({
     // --- HTTP server -----------------------------------------------------
     PORT: z.coerce.number().int().positive().default(3000),
     HOST: z.string().default("0.0.0.0"),
-
-    /**
-     * Path prefix mounted in front of every REST endpoint
-     * (auth/accounts/quick/api/methods + WebSocket /events).
-     * UI pages, /admin/login, /docs, /openapi.json, /health stay at root so
-     * the dashboard keeps working regardless of API versioning.
-     *
-     * Examples:
-     *   API_PREFIX=                  → /accounts        /api/{id}/{method}
-     *   API_PREFIX=/v1               → /v1/accounts     /v1/api/{id}/{method}
-     *   API_PREFIX=/api/v1           → /api/v1/accounts /api/v1/api/{id}/{method}
-     */
-    API_PREFIX: z.preprocess(
-        (v) => normalisePrefix(v as string | undefined),
-        z.string().default(""),
-    ),
 
     // --- MongoDB ---------------------------------------------------------
     MONGO_URI: z.string().default("mongodb://localhost:27017"),

@@ -21,6 +21,7 @@ const CATEGORIES: Record<string, string[]> = {
     Messaging: [
         "sendMessage",
         "sendByPhone",
+        "getMessages",
         "sendSticker",
         "sendVoice",
         "sendVideo",
@@ -50,6 +51,8 @@ const CATEGORIES: Record<string, string[]> = {
         "getFriendBoardList",
     ],
     "Group Management": [
+        "listGroups",
+        "getGroupChatHistory",
         "createGroup",
         "changeGroupName",
         "changeGroupAvatar",

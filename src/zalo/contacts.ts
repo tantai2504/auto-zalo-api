@@ -122,3 +122,40 @@ interface ZaloApiLike {
     findUser: ZaloApi["findUser"];
     sendMessage: ZaloApi["sendMessage"];
 }
+
+/**
+ * `listGroups` — convenience wrapper that combines getAllGroups + getGroupInfo
+ * so callers get a flat list of group info objects in a single call instead
+ * of having to do 2 round trips.
+ */
+type GroupsApi = {
+    getAllGroups: () => Promise<unknown>;
+    getGroupInfo: (groupIds: string | string[]) => Promise<unknown>;
+};
+
+export interface GroupInfoLike {
+    groupId: string;
+    name?: string;
+    desc?: string;
+    avt?: string;
+    memberIds?: string[];
+    creatorId?: string;
+    type?: number;
+    [key: string]: unknown;
+}
+
+export async function listGroups(api: GroupsApi): Promise<GroupInfoLike[]> {
+    const all = (await api.getAllGroups()) as { gridVerMap?: Record<string, unknown> } | null;
+    const ids = Object.keys(all?.gridVerMap ?? {});
+    if (ids.length === 0) return [];
+    const info = (await api.getGroupInfo(ids)) as { gridInfoMap?: Record<string, GroupInfoLike> } | null;
+    const map = info?.gridInfoMap ?? {};
+    return ids
+        .map((id) => {
+            const g = map[id];
+            if (!g) return null;
+            // Ensure groupId is always set even if missing from gridInfoMap entry.
+            return { ...g, groupId: g.groupId ?? id };
+        })
+        .filter((g): g is GroupInfoLike => g !== null);
+}

@@ -19,15 +19,8 @@ function escapeHtml(s) {
     );
 }
 
-function apiUrl(path) {
-    const prefix = (window.ZALO_AUTO && window.ZALO_AUTO.apiPrefix) || "";
-    if (!prefix) return path;
-    if (path.startsWith("/admin/")) return path;
-    return prefix + path;
-}
-
 async function callApi(path, opts = {}) {
-    const res = await fetch(apiUrl(path), {
+    const res = await fetch(path, {
         headers: { "Content-Type": "application/json" },
         credentials: "same-origin",
         ...opts,
@@ -63,15 +56,15 @@ const CATEGORY_VI = {
 const POPULAR_METHODS = [
     "fetchAccountInfo",
     "getOwnId",
-    "getAllGroups",
+    "listGroups",
     "getGroupInfo",
-    "getGroupMembersInfo",
+    "getMessages",
     "getAllFriends",
     "getUserInfo",
-    "findUser",
+    "findByPhone",
     "sendMessage",
+    "sendByPhone",
     "addUserToGroup",
-    "removeUserFromGroup",
     "createGroup",
 ];
 
@@ -260,7 +253,7 @@ function renderMethodPanel(doc) {
     }
 
     const accId = effectiveAccountId();
-    const fullPath = apiUrl(`/api/${accId}/${doc.name}`);
+    const fullPath = `/api/${accId}/${doc.name}`;
     const fullUrl = location.origin + fullPath;
 
     // 1. URL — when no account chosen, render `{accountId}` highlighted as placeholder

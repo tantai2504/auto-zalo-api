@@ -148,6 +148,72 @@ const DOCS: Record<string, MethodDoc> = {
     sendSeenEvent: { description: "Đánh dấu tin nhắn là đã xem." },
     sendDeliveredEvent: { description: "Đánh dấu tin nhắn là đã giao." },
 
+    getMessages: {
+        description:
+            "Lấy lịch sử tin nhắn (cả user 1-1 và group) đã được listener capture vào MongoDB. " +
+            "Lưu trong 30 ngày (TTL tự xoá), max 200 tin/lần query. " +
+            "⚠️ Cần BẬT LISTENER cho account trước (UI: Tài khoản → Sửa → Event & Webhook → Bật listener). " +
+            "Tin cũ trước khi bật listener KHÔNG có trong DB.",
+        notes:
+            "Pattern n8n cron: lưu lastSeenTs trong workflow, mỗi tick gọi với { since: lastSeenTs, order: 'asc' } → " +
+            "lấy tin mới hơn cursor, update lastSeenTs = ts của tin cuối.",
+        fields: [
+            { name: "threadId", type: "string", required: false,
+              description: "Lọc theo userId (1-1) hoặc groupId. Bỏ trống = lấy mọi thread." },
+            { name: "threadType", type: "0 | 1", required: false,
+              description: "Lọc loại: 0 = chỉ chat 1-1, 1 = chỉ group. Bỏ trống = cả hai." },
+            { name: "limit", type: "number", required: false,
+              description: "Số tin tối đa. Default 20, max 200." },
+            { name: "since", type: "number", required: false,
+              description: "Chỉ lấy tin có ts > since (millisecond). Dùng cho cron incremental pull." },
+            { name: "before", type: "number", required: false,
+              description: "Chỉ lấy tin có ts < before (ms). Dùng để paginate ngược về quá khứ." },
+            { name: "order", type: "'asc' | 'desc'", required: false,
+              description: "'desc' (default) = mới nhất trước; 'asc' = cũ nhất trước (cho cron)." },
+        ],
+        sampleResponse: [
+            {
+                id: "uuid-...",
+                accountId: "3044130a-...",
+                threadType: 0,
+                threadId: "<userId>",
+                fromUid: "<userId>",
+                msgId: "5894123456789012345",
+                cliMsgId: "...",
+                msgType: "chat.text",
+                content: "Xin chào",
+                ts: 1735000000000,
+                receivedAt: 1735000000050,
+            },
+            {
+                id: "uuid-...",
+                accountId: "3044130a-...",
+                threadType: 1,
+                threadId: "<groupId>",
+                fromUid: "<otherUid>",
+                msgId: "5894...",
+                cliMsgId: "...",
+                msgType: "chat.text",
+                content: "Hello cả nhóm",
+                ts: 1734999999000,
+                receivedAt: 1734999999100,
+            },
+        ],
+        examples: [
+            { summary: "Lấy 20 tin gần nhất (mọi thread)", args: [] },
+            { summary: "Tin gần nhất với 1 USER cụ thể", args: ["<userId>", 0, 10] },
+            { summary: "Tin gần nhất trong 1 GROUP", args: ["<groupId>", 1, 30] },
+            {
+                summary: "n8n cron: tin mới hơn timestamp X (incremental)",
+                args: [undefined, undefined, 100, 1735000000000, undefined, "asc"],
+            },
+            {
+                summary: "Paginate quá khứ: tin cũ hơn timestamp Y",
+                args: [undefined, undefined, 50, undefined, 1735000000000],
+            },
+        ],
+    },
+
     // ---------- Friends ----------------------------------------------------
     getAllFriends: {
         description: "Lấy danh sách bạn bè của tài khoản đang đăng nhập.",
@@ -353,10 +419,70 @@ const DOCS: Record<string, MethodDoc> = {
         ],
     },
     getAllGroups: {
-        description: "Lấy danh sách groupId mà tài khoản đang tham gia.",
+        description:
+            "Lấy danh sách groupId mà tài khoản đang tham gia (chỉ ID, không có name/avatar). " +
+            "Khuyến nghị dùng listGroups thay vì gọi method này riêng — đỡ phải gọi 2 lần.",
         fields: [],
         sampleResponse: { gridVerMap: { "<groupId1>": 0, "<groupId2>": 0 } },
-        examples: [{ summary: "List groups", args: [] }],
+        examples: [{ summary: "List groupIds (chưa có info)", args: [] }],
+    },
+    getGroupChatHistory: {
+        description:
+            "Lấy lịch sử tin nhắn của 1 group (mới nhất trước). " +
+            "⚠️ Zalo CHỈ hỗ trợ cho group — không có API tương tự cho chat 1-1 với user. " +
+            "Tin 1-1 phải dùng listener (WebSocket) để nhận realtime.",
+        fields: [
+            { name: "groupId", type: "string", required: true, description: "groupId của nhóm." },
+            { name: "count", type: "number", required: false,
+              description: "Số tin nhắn cần lấy. Mặc định 10–20 (zca-js tự đặt)." },
+        ],
+        sampleResponse: {
+            lastActionId: "...",
+            lastActionIdOther: "...",
+            more: 1,
+            groupMsgs: [
+                {
+                    msgId: "5894...",
+                    cliMsgId: "...",
+                    uidFrom: "<uid>",
+                    msgType: "chat.text",
+                    content: "Nội dung tin",
+                    ts: 1735000000000,
+                },
+            ],
+        },
+        examples: [
+            { summary: "Lấy 20 tin gần nhất", args: ["<groupId>", 20] },
+            { summary: "Mặc định (10-20)", args: ["<groupId>"] },
+        ],
+    },
+    listGroups: {
+        description:
+            "Lấy danh sách nhóm mà tài khoản tham gia, KÈM thông tin chi tiết (name, " +
+            "avatar, member, ...). Server tự gộp getAllGroups + getGroupInfo trong 1 call. " +
+            "Dùng cái này thay cho việc gọi 2 method riêng.",
+        fields: [],
+        sampleResponse: [
+            {
+                groupId: "1234567890",
+                name: "Tên nhóm 1",
+                desc: "Mô tả nhóm",
+                avt: "https://...",
+                memberIds: ["<uid1>", "<uid2>"],
+                creatorId: "<uid>",
+                type: 0,
+            },
+            {
+                groupId: "9876543210",
+                name: "Tên nhóm 2",
+                desc: "",
+                avt: "https://...",
+                memberIds: ["<uid1>", "<uid3>"],
+                creatorId: "<uid>",
+                type: 0,
+            },
+        ],
+        examples: [{ summary: "Lấy tất cả nhóm + info", args: [] }],
     },
     getGroupInfo: {
         description: "Lấy chi tiết của 1 group hoặc nhiều group.",
@@ -625,6 +751,8 @@ function parseParamNames(paramsStr: string): string[] {
 const VIRTUAL_PARAMS: Record<string, string> = {
     findByPhone: "(phoneNumber: string)",
     sendByPhone: "(phoneNumber: string, message: string | MessageContent)",
+    listGroups: "()",
+    getMessages: "(threadId?: string, threadType?: 0 | 1, limit?: number, since?: number, before?: number, order?: 'asc' | 'desc')",
 };
 
 export function getMethodDocs(name: string): MethodFullDoc | null {
