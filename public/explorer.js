@@ -1,7 +1,6 @@
 const $ = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
 
-const KEY_STORAGE = "zaloAutoApiKey";
 const ACC_STORAGE = "zaloAutoSelectedAcc";
 
 function toast(msg, kind = "info") {
@@ -80,59 +79,12 @@ let allMethods = [];
 let groupedMethods = [];
 let selectedMethod = null;
 let selectedAccountId = "";
-let savedApiKey = "";
 
 // ---- Logout ----
 $("#logoutBtn").addEventListener("click", async (ev) => {
     ev.preventDefault();
     try { await fetch("/admin/logout", { method: "POST", credentials: "same-origin" }); } catch {}
     location.href = "/login.html";
-});
-
-// ---- API key persisted in localStorage ----
-function loadKey() {
-    try {
-        savedApiKey = localStorage.getItem(KEY_STORAGE) || "";
-        if (savedApiKey) $("#apiKeyInput").value = savedApiKey;
-    } catch {}
-}
-function saveKey() {
-    try {
-        if (savedApiKey) localStorage.setItem(KEY_STORAGE, savedApiKey);
-        else localStorage.removeItem(KEY_STORAGE);
-    } catch {}
-}
-$("#apiKeyInput").addEventListener("input", (e) => {
-    savedApiKey = e.target.value.trim();
-    saveKey();
-    if (selectedMethod) renderMethodPanel(selectedMethod);
-});
-
-// Click "session token" link → exchange API key for short-lived token,
-// then store it as the saved key. cURL examples auto-update.
-$("#getSessionTokenBtn").addEventListener("click", async (ev) => {
-    ev.preventDefault();
-    if (!savedApiKey) {
-        toast("Paste API key trước rồi mới đổi được session token", "error");
-        return;
-    }
-    try {
-        const r = await fetch("/auth/session", {
-            method: "POST",
-            headers: { "X-API-Key": savedApiKey },
-            credentials: "same-origin",
-        });
-        const env = await r.json();
-        if (!env.ok) throw new Error(env.error?.message ?? `HTTP ${r.status}`);
-        savedApiKey = env.data.token;
-        $("#apiKeyInput").value = savedApiKey;
-        saveKey();
-        if (selectedMethod) renderMethodPanel(selectedMethod);
-        const mins = Math.round(env.data.ttlSec / 60);
-        toast(`Đã đổi sang session token, hết hạn sau ${mins} phút`, "success");
-    } catch (err) {
-        toast(err.message, "error");
-    }
 });
 
 // ---- Account picker ----
@@ -269,9 +221,6 @@ async function selectMethod(name) {
 function effectiveAccountId() {
     return selectedAccountId || "<accountId>";
 }
-function effectiveKey() {
-    return savedApiKey || "<paste API key của bạn ở sidebar>";
-}
 
 /**
  * Build the sample request body from method examples + paramNames.
@@ -318,12 +267,7 @@ function renderMethodPanel(doc) {
     $("#docUrl").innerHTML =
         `<span class="bg-primary-600 text-white px-2 py-0.5 rounded text-[11px] font-bold tracking-wider mr-2">POST</span>${escapeHtml(fullUrl)}`;
 
-    // 2. Headers
-    $("#docHeaders").textContent =
-        `Content-Type: application/json
-X-API-Key: ${effectiveKey()}`;
-
-    // 3. Body — first example
+    // 2. Body — first example
     const examples = doc.examples?.length ? doc.examples : [{ summary: "Default", args: [] }];
     const firstExample = examples[0];
     const reqBody = argsToBody(firstExample.args ?? [], doc.paramNames ?? []);
@@ -344,7 +288,6 @@ X-API-Key: ${effectiveKey()}`;
     const curl =
         `curl -X POST '${fullUrl}' \\\n` +
         `  -H 'Content-Type: application/json' \\\n` +
-        `  -H 'X-API-Key: ${effectiveKey()}' \\\n` +
         `  -d '${JSON.stringify(reqBody)}'`;
     $("#docCurl").textContent = curl;
 
