@@ -9,43 +9,83 @@ import { loadSignatures } from "./parseSignatures.js";
  * Example `args` arrays match the order the underlying method expects, so they
  * can be POSTed directly to /api/{accountId}/{method}.
  */
+interface FieldDoc {
+    /** Field name as it appears in the request body. Use dot notation for nested:
+     *   "message.msg" → message object's msg property. */
+    name: string;
+    /** Human-readable type — "string", "number", "object", "0 | 1", "string[]", ... */
+    type: string;
+    required: boolean;
+    description: string;
+}
+
 interface MethodDoc {
     description: string;
     notes?: string;
     examples?: Array<{ summary: string; args: unknown[] }>;
+    /** Per-field descriptions for the request body (top-level + nested). */
+    fields?: FieldDoc[];
+    /** Sample shape of the `data` field in a successful response. */
+    sampleResponse?: unknown;
 }
 
 const DOCS: Record<string, MethodDoc> = {
     // ---------- Messaging --------------------------------------------------
     sendMessage: {
-        description:
-            "Gửi tin nhắn (text hoặc rich content) tới user hoặc group. " +
-            "Type: 0 = User (1-1), 1 = Group.",
+        description: "Gửi tin nhắn tới 1 user (chat 1-1) hoặc 1 group.",
+        fields: [
+            { name: "message", type: "object | string", required: true,
+              description: "Nội dung tin nhắn. Truyền string để gửi text đơn giản, hoặc object để có rich content." },
+            { name: "message.msg", type: "string", required: true,
+              description: "Nội dung text (khi message là object)." },
+            { name: "message.mentions", type: "Mention[]", required: false,
+              description: "Danh sách mention. Mỗi mention { pos, uid, len }. Chỉ dùng khi gửi vào group." },
+            { name: "message.urgency", type: "0 | 1 | 2", required: false,
+              description: "Mức độ khẩn cấp: 0=Default, 1=Important, 2=Urgent." },
+            { name: "threadId", type: "string", required: true,
+              description: "userId của người nhận (khi type=0) HOẶC groupId (khi type=1)." },
+            { name: "type", type: "0 | 1", required: true,
+              description: "0 = gửi cho user (chat 1-1), 1 = gửi vào group." },
+        ],
+        sampleResponse: { message: { msgId: "5894123456789012345" }, attachment: [] },
         examples: [
             {
-                summary: "Tin text đơn giản tới user",
+                summary: "📩 Gửi cho USER (1-1)",
                 args: [{ msg: "Xin chào" }, "<userId>", 0],
             },
             {
-                summary: "Tin với mention tới group",
+                summary: "👥 Gửi vào GROUP",
+                args: [{ msg: "Hello cả nhóm" }, "<groupId>", 1],
+            },
+            {
+                summary: "👥 Gửi vào group có @mention",
                 args: [
-                    {
-                        msg: "@user xem nhé",
-                        mentions: [{ pos: 0, uid: "<userId>", len: 5 }],
-                    },
+                    { msg: "@An xem nhé", mentions: [{ pos: 0, uid: "<userId>", len: 3 }] },
                     "<groupId>",
                     1,
                 ],
             },
+            {
+                summary: "📩 Gửi text dài cho user (string)",
+                args: ["Tin nhắn dài nhiều dòng\nDòng 2", "<userId>", 0],
+            },
         ],
     },
     sendSticker: {
-        description: "Gửi sticker tới thread.",
+        description: "Gửi sticker tới 1 user (1-1) hoặc 1 group.",
+        fields: [
+            { name: "sticker", type: "object", required: true,
+              description: "Object sticker { id, cateId, type }. Lấy từ getStickers." },
+            { name: "sticker.id", type: "number", required: true, description: "ID sticker." },
+            { name: "sticker.cateId", type: "number", required: true, description: "ID category." },
+            { name: "sticker.type", type: "number", required: true, description: "Type sticker." },
+            { name: "threadId", type: "string", required: true, description: "userId (type=0) hoặc groupId (type=1)." },
+            { name: "type", type: "0 | 1", required: true, description: "0 = user, 1 = group." },
+        ],
+        sampleResponse: { msgId: "5894123456789012345" },
         examples: [
-            {
-                summary: "Gửi sticker theo id",
-                args: [{ id: 4524, cateId: 109, type: 1 }, "<threadId>", 0],
-            },
+            { summary: "📩 Gửi sticker cho USER", args: [{ id: 4524, cateId: 109, type: 1 }, "<userId>", 0] },
+            { summary: "👥 Gửi sticker vào GROUP", args: [{ id: 4524, cateId: 109, type: 1 }, "<groupId>", 1] },
         ],
     },
     sendVoice: {
@@ -79,23 +119,27 @@ const DOCS: Record<string, MethodDoc> = {
         description: "Chuyển tiếp 1 tin nhắn tới nhiều thread.",
     },
     addReaction: {
-        description: "Thả emoji reaction lên tin nhắn.",
+        description: "Thả emoji reaction lên 1 tin nhắn (chat 1-1 hoặc group).",
+        fields: [
+            { name: "icon", type: "string", required: true,
+              description: "Emoji string. Giá trị từ enum Reactions: HAHA, LIKE, HEART, WOW, SAD, ANGRY, ..." },
+            { name: "dest", type: "object", required: true, description: "Đích reaction." },
+            { name: "dest.threadId", type: "string", required: true, description: "userId (type=0) hoặc groupId (type=1)." },
+            { name: "dest.type", type: "0 | 1", required: true, description: "0 = user, 1 = group." },
+            { name: "dest.msgId", type: "string", required: true, description: "ID của tin nhắn cần react." },
+            { name: "dest.cliMsgId", type: "string", required: true, description: "Client message ID của tin." },
+        ],
+        sampleResponse: { msgId: "5894..." },
         examples: [
             {
-                summary: "Reaction 'haha'",
-                args: [
-                    "Reactions.HAHA",
-                    {
-                        threadId: "<threadId>",
-                        type: 0,
-                        msgId: "<msgId>",
-                        cliMsgId: "<cliMsgId>",
-                    },
-                ],
+                summary: "📩 React tin USER",
+                args: ["HAHA", { threadId: "<userId>", type: 0, msgId: "<msgId>", cliMsgId: "<cliMsgId>" }],
+            },
+            {
+                summary: "👥 React tin GROUP",
+                args: ["LIKE", { threadId: "<groupId>", type: 1, msgId: "<msgId>", cliMsgId: "<cliMsgId>" }],
             },
         ],
-        notes:
-            "Thay 'Reactions.HAHA' bằng giá trị emoji string thực tế (xem enum Reactions).",
     },
     sendTypingEvent: {
         description: "Phát event 'đang nhập...' cho thread.",
@@ -106,7 +150,15 @@ const DOCS: Record<string, MethodDoc> = {
 
     // ---------- Friends ----------------------------------------------------
     getAllFriends: {
-        description: "Lấy danh sách bạn bè. Có thể phân trang.",
+        description: "Lấy danh sách bạn bè của tài khoản đang đăng nhập.",
+        fields: [
+            { name: "count", type: "number", required: false, description: "Số bạn cần lấy. Bỏ trống = tất cả." },
+            { name: "page", type: "number", required: false, description: "Trang phân trang (bắt đầu từ 1)." },
+            { name: "avatarSize", type: "string", required: false, description: "Kích cỡ avatar URL (small/normal/large)." },
+        ],
+        sampleResponse: [
+            { userId: "1234567890", displayName: "Nguyễn Văn A", phoneNumber: "+84...", avatar: "https://..." },
+        ],
         examples: [
             { summary: "Lấy 100 bạn đầu tiên", args: [100, 1] },
             { summary: "Lấy tất cả (mặc định)", args: [] },
@@ -114,38 +166,48 @@ const DOCS: Record<string, MethodDoc> = {
     },
     sendFriendRequest: {
         description: "Gửi lời mời kết bạn kèm message.",
-        examples: [
-            {
-                summary: "Mời kết bạn",
-                args: ["Xin chào, kết bạn nhé!", "<userId>"],
-            },
+        fields: [
+            { name: "message", type: "string", required: true, description: "Lời nhắn kèm yêu cầu kết bạn." },
+            { name: "userId", type: "string", required: true, description: "userId của người muốn kết bạn." },
         ],
+        sampleResponse: { success: true },
+        examples: [{ summary: "Mời kết bạn", args: ["Xin chào, kết bạn nhé!", "<userId>"] }],
     },
     acceptFriendRequest: {
-        description: "Chấp nhận lời mời kết bạn.",
+        description: "Chấp nhận lời mời kết bạn từ user.",
+        fields: [{ name: "userId", type: "string", required: true, description: "userId người gửi lời mời." }],
+        sampleResponse: { success: true },
         examples: [{ summary: "Accept", args: ["<userId>"] }],
     },
-    undoFriendRequest: { description: "Huỷ lời mời kết bạn đã gửi." },
+    undoFriendRequest: {
+        description: "Huỷ lời mời kết bạn đã gửi.",
+        fields: [{ name: "userId", type: "string", required: true, description: "userId đã gửi lời mời." }],
+    },
     removeFriend: {
-        description: "Huỷ kết bạn (xoá khỏi friend list).",
+        description: "Huỷ kết bạn — xoá user khỏi friend list.",
+        fields: [{ name: "userId", type: "string", required: true, description: "userId của bạn cần huỷ." }],
         examples: [{ summary: "Unfriend", args: ["<userId>"] }],
     },
     changeFriendAlias: {
-        description: "Đặt biệt danh (alias) cho bạn.",
-        examples: [
-            {
-                summary: "Đặt alias",
-                args: ["Tên gợi nhớ", "<userId>"],
-            },
+        description: "Đặt biệt danh (alias) cho bạn — chỉ mình bạn thấy.",
+        fields: [
+            { name: "alias", type: "string", required: true, description: "Tên gợi nhớ." },
+            { name: "userId", type: "string", required: true, description: "userId của bạn." },
         ],
+        examples: [{ summary: "Đặt alias", args: ["Tên gợi nhớ", "<userId>"] }],
     },
-    removeFriendAlias: { description: "Xoá alias đã đặt cho bạn." },
+    removeFriendAlias: {
+        description: "Xoá alias đã đặt cho bạn.",
+        fields: [{ name: "userId", type: "string", required: true, description: "userId của bạn." }],
+    },
     blockUser: {
-        description: "Chặn user.",
+        description: "Chặn user — không nhận tin nhắn / không thấy được nhau.",
+        fields: [{ name: "userId", type: "string", required: true, description: "userId muốn chặn." }],
         examples: [{ summary: "Block", args: ["<userId>"] }],
     },
     unblockUser: {
         description: "Bỏ chặn user.",
+        fields: [{ name: "userId", type: "string", required: true, description: "userId muốn bỏ chặn." }],
         examples: [{ summary: "Unblock", args: ["<userId>"] }],
     },
     getFriendRequestStatus: { description: "Trạng thái lời mời kết bạn đã gửi." },
@@ -155,24 +217,62 @@ const DOCS: Record<string, MethodDoc> = {
 
     // ---------- User & Account --------------------------------------------
     fetchAccountInfo: {
-        description:
-            "Lấy thông tin tài khoản đang đăng nhập. Trả về `{ profile, biz }` " +
-            "với profile.userId, displayName, phoneNumber, avatar, ...",
+        description: "Lấy thông tin tài khoản đang đăng nhập (chính mình).",
+        fields: [],
+        sampleResponse: {
+            profile: {
+                userId: "1234567890",
+                displayName: "Tấn Tài",
+                phoneNumber: "+84...",
+                avatar: "https://...",
+                gender: 0,
+                dob: 988131600,
+                sdob: "25/04/2001",
+            },
+            biz: { desc: "...", cate: 0 },
+        },
         examples: [{ summary: "Lấy info", args: [] }],
     },
     getUserInfo: {
-        description: "Lấy thông tin user theo uid (hoặc mảng uid).",
+        description: "Lấy thông tin chi tiết của user khác theo userId.",
+        fields: [
+            { name: "userId", type: "string | string[]", required: true,
+              description: "1 userId hoặc mảng nhiều userId." },
+        ],
+        sampleResponse: {
+            "1234567890": {
+                userId: "1234567890",
+                displayName: "Nguyễn Văn A",
+                avatar: "https://...",
+            },
+        },
         examples: [
             { summary: "Một user", args: ["<userId>"] },
             { summary: "Nhiều user", args: [["<uid1>", "<uid2>"]] },
         ],
     },
     getOwnId: {
-        description: "Lấy uid của tài khoản đang đăng nhập.",
+        description: "Lấy userId của tài khoản đang đăng nhập (mình).",
+        fields: [],
+        sampleResponse: "1234567890",
         examples: [{ summary: "Get own id", args: [] }],
     },
     findUser: {
         description: "Tìm user theo số điện thoại.",
+        fields: [
+            { name: "phoneNumber", type: "string", required: true,
+              description: "SĐT định dạng +84..., 0..., hoặc 84..." },
+            { name: "avatarSize", type: "string", required: false, description: "Kích cỡ avatar URL." },
+        ],
+        sampleResponse: {
+            uid: "1234567890",
+            display_name: "Nguyễn Văn A",
+            zalo_name: "...",
+            avatar: "https://...",
+            cover: "https://...",
+            gender: 0,
+            globalId: "...",
+        },
         examples: [{ summary: "Tìm SĐT", args: ["+84..."] }],
     },
     findUserByUsername: { description: "Tìm user theo username (@xxx)." },
@@ -192,75 +292,99 @@ const DOCS: Record<string, MethodDoc> = {
 
     // ---------- Groups -----------------------------------------------------
     createGroup: {
-        description: "Tạo group chat mới với danh sách thành viên.",
+        description: "Tạo group chat mới với danh sách thành viên ban đầu.",
+        fields: [
+            { name: "name", type: "string", required: false, description: "Tên nhóm." },
+            { name: "members", type: "string[]", required: true,
+              description: "Mảng userId của các thành viên thêm vào nhóm." },
+            { name: "avatarSource", type: "AttachmentSource", required: false,
+              description: "Đường dẫn file ảnh hoặc Attachment object dùng làm avatar." },
+        ],
+        sampleResponse: {
+            groupId: "1234567890",
+            groupType: 1,
+            sucessMembers: ["<uid1>", "<uid2>"],
+            errorMembers: [],
+        },
         examples: [
-            {
-                summary: "Tạo group",
-                args: [
-                    {
-                        name: "Tên nhóm",
-                        members: ["<uid1>", "<uid2>"],
-                    },
-                ],
-            },
+            { summary: "Tạo group", args: [{ name: "Tên nhóm", members: ["<uid1>", "<uid2>"] }] },
         ],
     },
     getAllGroups: {
-        description: "Danh sách groupId mà tài khoản đang tham gia.",
+        description: "Lấy danh sách groupId mà tài khoản đang tham gia.",
+        fields: [],
+        sampleResponse: { gridVerMap: { "<groupId1>": 0, "<groupId2>": 0 } },
         examples: [{ summary: "List groups", args: [] }],
     },
     getGroupInfo: {
-        description: "Lấy chi tiết group theo groupId (hoặc mảng).",
+        description: "Lấy chi tiết của 1 group hoặc nhiều group.",
+        fields: [
+            { name: "groupId", type: "string | string[]", required: true,
+              description: "1 groupId hoặc mảng groupId." },
+        ],
+        sampleResponse: {
+            gridInfoMap: {
+                "<groupId>": {
+                    groupId: "<groupId>",
+                    name: "Tên nhóm",
+                    desc: "Mô tả",
+                    avt: "https://...",
+                    memberIds: ["<uid1>", "<uid2>"],
+                    creatorId: "<uid>",
+                },
+            },
+        },
         examples: [{ summary: "Lấy 1 group", args: ["<groupId>"] }],
     },
     getGroupMembersInfo: {
         description: "Lấy thông tin chi tiết các thành viên trong group.",
-        examples: [
-            {
-                summary: "Lấy theo uid",
-                args: [["<uid1>", "<uid2>"], "<groupId>"],
-            },
+        fields: [
+            { name: "memberIds", type: "string[]", required: true, description: "Mảng userId cần lấy info." },
+            { name: "groupId", type: "string", required: true, description: "groupId chứa các member." },
         ],
+        examples: [{ summary: "Lấy theo uid", args: [["<uid1>", "<uid2>"], "<groupId>"] }],
     },
     addUserToGroup: {
-        description: "Thêm user(s) vào group.",
+        description: "Thêm user(s) vào group hiện tại.",
+        fields: [
+            { name: "memberIds", type: "string | string[]", required: true,
+              description: "1 userId hoặc mảng userIds muốn thêm vào group." },
+            { name: "groupId", type: "string", required: true, description: "groupId đích." },
+        ],
+        sampleResponse: { errorMembers: [], succMembers: ["<uid>"] },
         examples: [
-            {
-                summary: "Thêm 1 người",
-                args: ["<userId>", "<groupId>"],
-            },
-            {
-                summary: "Thêm nhiều người",
-                args: [["<uid1>", "<uid2>"], "<groupId>"],
-            },
+            { summary: "Thêm 1 người", args: ["<userId>", "<groupId>"] },
+            { summary: "Thêm nhiều người", args: [["<uid1>", "<uid2>"], "<groupId>"] },
         ],
     },
     removeUserFromGroup: {
-        description: "Xoá user khỏi group (cần quyền admin/owner).",
-        examples: [
-            {
-                summary: "Đuổi 1 user",
-                args: ["<userId>", "<groupId>"],
-            },
+        description: "Xoá user(s) khỏi group. Cần quyền admin hoặc owner của nhóm.",
+        fields: [
+            { name: "memberIds", type: "string | string[]", required: true, description: "userId hoặc mảng cần xoá." },
+            { name: "groupId", type: "string", required: true, description: "groupId của nhóm." },
         ],
+        sampleResponse: { errorMembers: [], succMembers: ["<uid>"] },
+        examples: [{ summary: "Đuổi 1 user", args: ["<userId>", "<groupId>"] }],
     },
     inviteUserToGroups: { description: "Mời 1 user vào nhiều group cùng lúc." },
     addGroupDeputy: { description: "Phong phó nhóm." },
     removeGroupDeputy: { description: "Gỡ phó nhóm." },
     changeGroupName: {
         description: "Đổi tên group.",
-        examples: [
-            {
-                summary: "Đổi tên",
-                args: ["Tên mới", "<groupId>"],
-            },
+        fields: [
+            { name: "name", type: "string", required: true, description: "Tên mới của group." },
+            { name: "groupId", type: "string", required: true, description: "groupId cần đổi tên." },
         ],
+        sampleResponse: { success: true },
+        examples: [{ summary: "Đổi tên", args: ["Tên mới", "<groupId>"] }],
     },
     changeGroupAvatar: { description: "Đổi avatar nhóm." },
     changeGroupOwner: { description: "Chuyển quyền chủ nhóm sang user khác." },
     disperseGroup: { description: "Giải tán nhóm (chỉ owner)." },
     leaveGroup: {
-        description: "Rời nhóm.",
+        description: "Rời nhóm. Sau khi rời sẽ không nhận được tin nữa.",
+        fields: [{ name: "groupId", type: "string", required: true, description: "groupId muốn rời." }],
+        sampleResponse: { success: true },
         examples: [{ summary: "Leave", args: ["<groupId>"] }],
     },
     getPendingGroupMembers: { description: "Danh sách yêu cầu vào nhóm chờ duyệt." },
@@ -276,9 +400,11 @@ const DOCS: Record<string, MethodDoc> = {
     getGroupLinkDetail: { description: "Chi tiết link nhóm (xem trước khi join)." },
     joinGroupLink: {
         description: "Vào group bằng link mời.",
-        examples: [
-            { summary: "Join via link", args: ["https://zalo.me/g/..."] },
+        fields: [
+            { name: "link", type: "string", required: true, description: "URL mời nhóm dạng https://zalo.me/g/..." },
         ],
+        sampleResponse: { groupId: "1234567890", success: true },
+        examples: [{ summary: "Join via link", args: ["https://zalo.me/g/..."] }],
     },
     getGroupInviteBoxList: { description: "Danh sách lời mời vào group." },
     getGroupInviteBoxInfo: { description: "Chi tiết 1 lời mời vào group." },
@@ -296,12 +422,17 @@ const DOCS: Record<string, MethodDoc> = {
     updateHiddenConversPin: { description: "Đổi PIN ẩn." },
     getArchivedChatList: { description: "Danh sách thread đã lưu trữ." },
     setMute: {
-        description: "Tắt thông báo cho 1 thread (mute).",
+        description: "Tắt thông báo (mute) cho 1 cuộc trò chuyện 1-1 hoặc group.",
+        fields: [
+            { name: "threadId", type: "string", required: true, description: "userId (type=0) hoặc groupId (type=1)." },
+            { name: "type", type: "0 | 1", required: true, description: "0 = user, 1 = group." },
+            { name: "duration", type: "number", required: true,
+              description: "Thời gian mute tính bằng giây. -1 = mute vĩnh viễn." },
+        ],
+        sampleResponse: { success: true },
         examples: [
-            {
-                summary: "Mute 1 giờ",
-                args: [{ threadId: "<threadId>", type: 0, duration: 3600 }],
-            },
+            { summary: "📩 Mute USER 1 giờ", args: [{ threadId: "<userId>", type: 0, duration: 3600 }] },
+            { summary: "👥 Mute GROUP vĩnh viễn", args: [{ threadId: "<groupId>", type: 1, duration: -1 }] },
         ],
     },
     getMute: { description: "Danh sách thread đang bị mute." },
@@ -370,8 +501,9 @@ const DOCS: Record<string, MethodDoc> = {
 
     // ---------- Settings & Utility ----------------------------------------
     keepAlive: {
-        description:
-            "Giữ session sống. Gọi định kỳ ~5 phút để tránh bị Zalo cut session.",
+        description: "Giữ session sống. Server đã tự gọi mỗi 4 phút — bạn ít khi cần gọi tay.",
+        fields: [],
+        sampleResponse: { success: true },
         examples: [{ summary: "Keep alive", args: [] }],
     },
     updateSettings: { description: "Cập nhật setting tài khoản (privacy, ...)." },
@@ -393,7 +525,9 @@ const DOCS: Record<string, MethodDoc> = {
     },
     undo: { description: "Thu hồi 1 hành động (chỉ áp dụng vài action)." },
     parseLink: {
-        description: "Lấy preview meta của 1 link (title, description, image).",
+        description: "Lấy preview meta (title, description, image) của 1 URL — dùng trước khi sendLink.",
+        fields: [{ name: "link", type: "string", required: true, description: "URL cần parse." }],
+        sampleResponse: { title: "...", desc: "...", thumb: "https://...", url: "https://example.com" },
         examples: [{ summary: "Parse URL", args: ["https://example.com"] }],
     },
     getQR: { description: "Tạo QR code cho thông tin nào đó (xem zca-js docs)." },
@@ -408,12 +542,41 @@ export interface MethodFullDoc {
     notes?: string;
     /** TypeScript params signature, e.g. "(threadId: string, type?: ThreadType)" */
     params: string;
+    /** Just the param names parsed out of `params`, in order. */
+    paramNames: string[];
     /** TypeScript return type, e.g. "Promise<SendMessageResponse>" */
     returnType: string;
     /** Practical examples — args arrays usable directly with /api/{id}/{method} */
     examples: Array<{ summary: string; args: unknown[] }>;
+    /** Per-field Vietnamese descriptions (top-level + dotted nested keys). */
+    fields: FieldDoc[];
+    /** Sample shape of `data` in successful response — null if not documented. */
+    sampleResponse: unknown;
     /** Doc URL on zca-js.tdung.com (kept for reference, not required) */
     docUrl: string;
+}
+
+function parseParamNames(paramsStr: string): string[] {
+    const inner = paramsStr.replace(/^\(|\)$/g, "").trim();
+    if (!inner) return [];
+    const parts: string[] = [];
+    let depth = 0;
+    let buf = "";
+    for (const ch of inner) {
+        if (ch === "<" || ch === "(" || ch === "{" || ch === "[") depth++;
+        else if (ch === ">" || ch === ")" || ch === "}" || ch === "]") depth--;
+        if (ch === "," && depth === 0) {
+            parts.push(buf.trim());
+            buf = "";
+        } else {
+            buf += ch;
+        }
+    }
+    if (buf.trim()) parts.push(buf.trim());
+    return parts.map((p) => {
+        const m = /^([\w$]+)(\?)?\s*:/.exec(p);
+        return m && m[1] ? m[1] : p.trim();
+    });
 }
 
 export function getMethodDocs(name: string): MethodFullDoc | null {
@@ -422,6 +585,8 @@ export function getMethodDocs(name: string): MethodFullDoc | null {
     const sig = sigs[name];
     const doc = DOCS[name];
     if (!cat && !sig) return null;
+    const params = sig?.params ?? "(...args)";
+    const paramNames = parseParamNames(params);
     return {
         name,
         category: cat?.category ?? "Other",
@@ -429,11 +594,25 @@ export function getMethodDocs(name: string): MethodFullDoc | null {
             doc?.description ??
             "Chưa có mô tả tiếng Việt. Tham số xem ở signature bên dưới.",
         notes: doc?.notes,
-        params: sig?.params ?? "(...args)",
+        params,
+        paramNames,
         returnType: sig?.returnType ?? "Promise<unknown>",
         examples: doc?.examples ?? [{ summary: "Default", args: [] }],
+        fields: doc?.fields ?? fallbackFields(paramNames),
+        sampleResponse: doc?.sampleResponse ?? null,
         docUrl: cat?.docUrl ?? `https://zca-js.tdung.com/vi/apis/${name}.html`,
     };
+}
+
+/** When a method has no hand-written `fields`, generate placeholder entries
+ *  from the parsed param names. Type/required/description are unknown. */
+function fallbackFields(paramNames: string[]): FieldDoc[] {
+    return paramNames.map((name) => ({
+        name,
+        type: "unknown",
+        required: false,
+        description: "(Chưa có mô tả tiếng Việt — xem signature TypeScript)",
+    }));
 }
 
 export function getAllMethodDocs(): MethodFullDoc[] {
@@ -453,13 +632,17 @@ export function getAllMethodDocs(): MethodFullDoc[] {
     for (const name of Object.keys(sigs)) {
         if (seen.has(name)) continue;
         const sig = sigs[name]!;
+        const paramNames = parseParamNames(sig.params);
         out.push({
             name,
             category: "Other",
-            description: "Method tồn tại trong zca-js nhưng chưa có trong catalog.",
+            description: "Method tồn tại nhưng chưa có trong catalog.",
             params: sig.params,
+            paramNames,
             returnType: sig.returnType,
             examples: [{ summary: "Default", args: [] }],
+            fields: fallbackFields(paramNames),
+            sampleResponse: null,
             docUrl: `https://zca-js.tdung.com/vi/apis/${name}.html`,
         });
     }

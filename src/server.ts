@@ -3,7 +3,6 @@ import { dirname, resolve } from "node:path";
 import cookieParser from "cookie-parser";
 import express from "express";
 import { pinoHttp } from "pino-http";
-import swaggerUi from "swagger-ui-express";
 import { config } from "./config.js";
 import { logger } from "./logger.js";
 import { connectDb, closeDb, pingDb, startQrCleanupLoop, stopQrCleanupLoop } from "./db/index.js";
@@ -14,7 +13,6 @@ import { methodsRouter } from "./routes/methods.js";
 import { quickRouter } from "./routes/quick.js";
 import { adminRouter } from "./routes/admin.js";
 import { apiKeysRouter } from "./routes/apiKeys.js";
-import { openapiSpec } from "./openapi.js";
 import { fail, ok as okEnvelope } from "./http/response.js";
 import {
     corsMiddleware,
@@ -78,9 +76,6 @@ async function main(): Promise<void> {
         okEnvelope(res, data);
     });
 
-    // OpenAPI spec — public, cached for 1 hour.
-    app.get("/openapi.json", cacheControl(3600), (_req, res) => res.json(openapiSpec));
-
     // Runtime config for the UI (lets static pages know the API_PREFIX).
     // Cached briefly — server restart picks up new env anyway.
     app.get("/config.js", cacheControl(60), (_req, res) => {
@@ -89,16 +84,6 @@ async function main(): Promise<void> {
             `window.ZALO_AUTO = ${JSON.stringify({ apiPrefix: config.API_PREFIX })};`,
         );
     });
-
-    // Swagger UI assets — public.
-    app.use(
-        "/docs",
-        swaggerUi.serve,
-        swaggerUi.setup(openapiSpec, {
-            customSiteTitle: "zalo-auto API docs",
-            swaggerOptions: { docExpansion: "list", filter: true, persistAuthorization: true },
-        }),
-    );
 
     // ----- Admin auth (login/logout/me) — public for login itself ----
     // Admin stays at root (/admin/login) so the UI doesn't have to know the

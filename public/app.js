@@ -3,7 +3,12 @@ const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
 
 function toast(message, kind = "info") {
     const el = document.createElement("div");
-    el.className = `toast ${kind}`;
+    const palette = {
+        info: "bg-slate-800",
+        success: "bg-green-600",
+        error: "bg-red-600",
+    };
+    el.className = `${palette[kind] ?? palette.info} text-white px-4 py-2 rounded-md shadow-lg text-sm pointer-events-auto animate-fadeIn`;
     el.textContent = message;
     $("#toasts").appendChild(el);
     setTimeout(() => el.remove(), 4000);
@@ -100,7 +105,13 @@ function sessionBadge(accountId) {
         checking: "checking…",
         unknown: "—",
     }[s];
-    return `<span class="badge session-${s}">${label}</span>`;
+    const cls = {
+        online: "bg-green-100 text-green-700",
+        offline: "bg-red-100 text-red-700",
+        checking: "bg-amber-100 text-amber-700",
+        unknown: "bg-slate-100 text-slate-500",
+    }[s];
+    return `<span class="${cls} px-2 py-0.5 rounded text-xs font-semibold uppercase">${label}</span>`;
 }
 
 function renderAccounts(accounts) {
@@ -110,26 +121,36 @@ function renderAccounts(accounts) {
     for (const acc of accounts) {
         const tr = document.createElement("tr");
         tr.dataset.id = acc.id;
+        tr.className = "hover:bg-slate-50 transition-colors";
+        const statusBadge =
+            acc.status === "active"
+                ? '<span class="bg-green-100 text-green-700 px-2 py-0.5 rounded text-xs font-semibold uppercase">active</span>'
+                : '<span class="bg-red-100 text-red-700 px-2 py-0.5 rounded text-xs font-semibold uppercase">disabled</span>';
+        const ghostBtn = "px-2 py-1 text-xs border border-slate-300 hover:bg-slate-100 rounded transition-colors";
+        const dangerBtn = "px-2 py-1 text-xs bg-red-600 hover:bg-red-700 text-white rounded transition-colors";
         tr.innerHTML = `
-            <td class="contact-cell">
-                <div class="contact-name">${escapeHtml(acc.displayName ?? "—")}</div>
-                <div class="contact-phone">${escapeHtml(acc.phone ?? "—")}</div>
+            <td class="px-4 py-3">
+                <div class="font-medium text-slate-900">${escapeHtml(acc.displayName ?? "—")}</div>
+                <div class="text-xs text-slate-500 mt-0.5">${escapeHtml(acc.phone ?? "—")}</div>
             </td>
-            <td class="uid">
-                <button class="copy-id" data-action="copy-id" title="Click để copy: ${escapeHtml(acc.id)}">
-                    <span class="copy-text">${escapeHtml(shortUid(acc.id))}</span>
-                    <span class="copy-icon">⧉</span>
+            <td class="px-4 py-3">
+                <button data-action="copy-id" title="Click để copy: ${escapeHtml(acc.id)}"
+                    class="inline-flex items-center gap-1 px-2 py-1 text-xs font-mono bg-slate-50 hover:bg-primary-50 hover:text-primary-700 hover:border-primary-300 border border-slate-200 rounded transition-colors">
+                    <span>${escapeHtml(shortUid(acc.id))}</span>
+                    <span class="opacity-60">⧉</span>
                 </button>
             </td>
-            <td class="uid" title="${escapeHtml(acc.uid)}">${escapeHtml(shortUid(acc.uid))}</td>
-            <td><span class="badge ${acc.status}">${acc.status}</span></td>
-            <td class="session-cell">${sessionBadge(acc.id)}</td>
-            <td class="actions">
-                <button class="ghost" data-action="check" title="Kiểm tra session">Check</button>
-                <button class="ghost" data-action="cookie" title="Xem cookie session">Cookie</button>
-                <button class="ghost" data-action="edit" title="Sửa thông tin / token / event">Sửa</button>
-                <button class="ghost" data-action="toggle" title="${acc.status === "active" ? "Tắt tài khoản" : "Bật tài khoản"}">${acc.status === "active" ? "Tắt" : "Bật"}</button>
-                <button class="danger" data-action="del" title="Xoá">Xoá</button>
+            <td class="px-4 py-3 font-mono text-xs text-slate-500" title="${escapeHtml(acc.uid)}">${escapeHtml(shortUid(acc.uid))}</td>
+            <td class="px-4 py-3">${statusBadge}</td>
+            <td class="px-4 py-3 session-cell">${sessionBadge(acc.id)}</td>
+            <td class="px-4 py-3 text-right">
+                <div class="inline-flex gap-1.5">
+                    <button class="${ghostBtn}" data-action="check">Check</button>
+                    <button class="${ghostBtn}" data-action="cookie">Cookie</button>
+                    <button class="${ghostBtn}" data-action="edit">Sửa</button>
+                    <button class="${ghostBtn}" data-action="toggle">${acc.status === "active" ? "Tắt" : "Bật"}</button>
+                    <button class="${dangerBtn}" data-action="del">Xoá</button>
+                </div>
             </td>
         `;
         tr.querySelector('[data-action="check"]').addEventListener("click", () => checkAcc(acc));
@@ -279,11 +300,11 @@ function renderListenerToggle(acc) {
     const badge = $("#listenerBadge");
     const btn = $("#listenerToggleBtn");
     if (acc.listenerEnabled) {
-        badge.className = "badge listener-on";
+        badge.className = "px-2 py-0.5 rounded text-xs font-semibold uppercase bg-green-100 text-green-700";
         badge.textContent = "ON";
         btn.textContent = "Tắt listener";
     } else {
-        badge.className = "badge listener-off";
+        badge.className = "px-2 py-0.5 rounded text-xs font-semibold uppercase bg-slate-100 text-slate-500";
         badge.textContent = "OFF";
         btn.textContent = "Bật listener";
     }
@@ -362,9 +383,16 @@ $("#copyZpwSekBtn").addEventListener("click", async () => {
 });
 
 function switchEditTab(name) {
-    $$("[data-edit-tab]").forEach((t) =>
-        t.classList.toggle("active", t.dataset.editTab === name),
-    );
+    const activeCls = ["border-primary-600", "text-primary-600"];
+    const inactiveCls = ["border-transparent", "text-slate-500", "hover:text-slate-900"];
+    $$("[data-edit-tab]").forEach((t) => {
+        const isActive = t.dataset.editTab === name;
+        t.classList.toggle("border-primary-600", isActive);
+        t.classList.toggle("text-primary-600", isActive);
+        t.classList.toggle("border-transparent", !isActive);
+        t.classList.toggle("text-slate-500", !isActive);
+        t.classList.toggle("hover:text-slate-900", !isActive);
+    });
     $$("[data-edit-panel]").forEach((p) =>
         p.classList.toggle("hidden", p.dataset.editPanel !== name),
     );

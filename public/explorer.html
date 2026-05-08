@@ -4,109 +4,136 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Tài liệu API — Zalo Auto</title>
-    <link rel="stylesheet" href="/styles.css" />
-    <link rel="stylesheet" href="/explorer.css" />
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="/tailwind-init.js"></script>
     <script src="/config.js"></script>
     <script src="/auth-guard.js"></script>
 </head>
-<body>
-    <header>
-        <div class="header-inner">
+<body class="min-h-screen bg-slate-50 text-slate-900 font-sans">
+
+    <header class="bg-gradient-to-r from-primary-600 to-primary-800 text-white shadow">
+        <div class="max-w-7xl mx-auto px-6 py-5 flex items-center justify-between gap-4 flex-wrap">
             <div>
-                <h1>Tài liệu API</h1>
-                <p class="muted">Hướng dẫn cách dùng từng API — phân nhóm theo tính năng</p>
+                <h1 class="text-xl font-semibold">Tài liệu API</h1>
+                <p class="text-sm text-white/80 mt-0.5">URL, body, response, field — chi tiết theo tính năng</p>
             </div>
-            <nav class="header-nav">
-                <a href="/">Tài khoản</a>
-                <a href="/api-keys.html">API Keys</a>
-                <a href="/docs" target="_blank" rel="noopener">Swagger (test API)</a>
-                <a href="#" id="logoutBtn">Đăng xuất</a>
+            <nav class="flex flex-wrap gap-2 text-sm">
+                <a href="/" class="px-3 py-1.5 rounded-md bg-white/10 hover:bg-white/20 transition-colors">Tài khoản</a>
+                <a href="/api-keys.html" class="px-3 py-1.5 rounded-md bg-white/10 hover:bg-white/20 transition-colors">API Keys</a>
+                <a href="#" id="logoutBtn" class="px-3 py-1.5 rounded-md bg-white/10 hover:bg-white/20 transition-colors">Đăng xuất</a>
             </nav>
         </div>
     </header>
 
-    <div class="explorer">
-        <aside class="sidebar">
-            <div class="auth-info">
-                <div class="auth-info-title">🔑 Cần API key</div>
-                <div class="auth-info-body">
-                    Mọi request cần header <code>X-API-Key</code>. Tạo key tại
-                    <a href="/api-keys.html">/api-keys.html</a>.
-                </div>
+    <div class="max-w-7xl mx-auto px-6 py-6 grid grid-cols-1 lg:grid-cols-[320px_1fr] gap-5">
+        <aside class="bg-white border border-slate-200 rounded-xl shadow-card p-4 lg:sticky lg:top-6 lg:self-start lg:max-h-[calc(100vh-3rem)] flex flex-col">
+            <div class="bg-primary-50 border border-primary-100 rounded-md p-3 mb-3">
+                <label class="block">
+                    <span class="text-xs font-semibold text-primary-700">🔑 API key (lưu trong browser)</span>
+                    <input id="apiKeyInput" type="password" placeholder="zk_..." autocomplete="off"
+                        class="mt-1.5 w-full px-2.5 py-1.5 border border-slate-300 rounded text-xs font-mono focus:ring-2 focus:ring-primary-500 focus:border-primary-500 focus:outline-none" />
+                </label>
+                <p class="text-[11px] text-slate-600 mt-2 leading-relaxed">
+                    Paste 1 lần — mọi cURL trong docs tự fill. Tạo key tại <a href="/api-keys.html" class="text-primary-700 hover:underline">/api-keys.html</a>.
+                </p>
+                <p class="text-[11px] text-slate-500 mt-1.5 leading-relaxed">
+                    💡 Tải nặng? Đổi key → <a href="#" id="getSessionTokenBtn" class="text-primary-700 hover:underline font-medium">session token</a> (15min, fast — không cần DB).
+                </p>
             </div>
 
-            <div class="account-picker">
-                <label>Account dùng trong ví dụ
-                    <select id="accountSelect">
+            <div class="border-b border-slate-200 pb-3 mb-3">
+                <label class="block">
+                    <span class="text-xs font-medium text-slate-600">👤 Account dùng trong ví dụ</span>
+                    <select id="accountSelect" class="mt-1.5 w-full px-2.5 py-1.5 border border-slate-300 rounded text-sm bg-white focus:ring-2 focus:ring-primary-500 focus:border-primary-500 focus:outline-none">
                         <option value="">— Chưa chọn —</option>
                     </select>
                 </label>
             </div>
-            <div class="search-box">
-                <input id="search" type="search" placeholder="Tìm method..." />
-                <span id="methodCount" class="muted"></span>
+
+            <div class="flex items-center gap-2 mb-2">
+                <input id="search" type="search" placeholder="Tìm method..."
+                    class="flex-1 px-2.5 py-1.5 border border-slate-300 rounded text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500 focus:outline-none" />
+                <span id="methodCount" class="text-xs text-slate-500 whitespace-nowrap"></span>
             </div>
-            <nav id="categoryList" class="method-list"></nav>
+
+            <nav id="categoryList" class="flex-1 overflow-y-auto -mx-2 px-2"></nav>
         </aside>
 
-        <main class="content">
-            <div id="welcome" class="welcome">
-                <h2>👋 Bắt đầu</h2>
-                <ol>
-                    <li>Tạo API key tại <a href="/api-keys.html">/api-keys.html</a> (lưu key — chỉ hiển thị 1 lần).</li>
-                    <li>Thêm tài khoản Zalo tại <a href="/">/</a> rồi copy <strong>Account ID</strong>.</li>
-                    <li>Chọn nhóm tính năng bên trái → click method để xem cách gọi.</li>
-                    <li>Mọi response đều có dạng <code>{ ok, data, meta }</code>.</li>
+        <main class="bg-white border border-slate-200 rounded-xl shadow-card p-7 min-w-0">
+            <div id="welcome">
+                <h2 class="text-lg font-semibold mb-3">👋 Hướng dẫn nhanh</h2>
+                <ol class="list-decimal list-inside space-y-1.5 text-sm text-slate-700">
+                    <li>Tạo API key tại <a href="/api-keys.html" class="text-primary-700 hover:underline">/api-keys.html</a> → paste vào ô bên trái</li>
+                    <li>Thêm tài khoản Zalo tại <a href="/" class="text-primary-700 hover:underline">/</a> → chọn account ở sidebar</li>
+                    <li>Chọn method ở sidebar bên trái</li>
+                    <li>Đọc URL, Body, Fields, Response → copy cURL hoặc dùng client của bạn</li>
                 </ol>
+                <p class="mt-4 text-sm text-slate-500">
+                    Mọi response đều theo envelope <code class="text-xs bg-slate-100 px-1 py-0.5 rounded">{ ok, data, meta }</code>.
+                    Lỗi: <code class="text-xs bg-slate-100 px-1 py-0.5 rounded">{ ok: false, error: { code, message } }</code>.
+                </p>
             </div>
 
-            <article id="methodPanel" class="method-panel hidden">
-                <header class="method-header">
-                    <span id="methodCategory" class="badge category"></span>
-                    <h2 id="methodName">—</h2>
+            <article id="methodPanel" class="hidden">
+                <header class="flex items-center gap-3 mb-3 flex-wrap">
+                    <span id="methodCategory" class="bg-primary-100 text-primary-700 px-2.5 py-0.5 rounded text-xs font-medium"></span>
+                    <h2 id="methodName" class="font-mono text-2xl font-semibold m-0">—</h2>
                 </header>
-                <p id="methodDesc" class="method-desc"></p>
-                <p id="methodNotes" class="method-notes hidden"></p>
+                <p id="methodDesc" class="text-base text-slate-700 mb-4 leading-relaxed"></p>
+                <p id="methodNotes" class="hidden bg-amber-50 border-l-4 border-amber-400 text-amber-900 px-4 py-2.5 rounded text-sm mb-4"></p>
 
-                <section class="doc-section">
-                    <h3>📍 URL</h3>
-                    <pre id="docUrl" class="code-block code-mono"></pre>
+                <section class="mt-6 pb-5 border-b border-slate-200">
+                    <h3 class="text-sm font-semibold mb-2">📍 URL</h3>
+                    <pre id="docUrl" class="bg-slate-50 border border-slate-200 text-slate-800 p-3 rounded font-mono text-sm overflow-x-auto"></pre>
                 </section>
 
-                <section class="doc-section">
-                    <h3>📨 Headers</h3>
-                    <pre id="docHeaders" class="code-block code-mono"></pre>
+                <section class="mt-6 pb-5 border-b border-slate-200">
+                    <h3 class="text-sm font-semibold mb-2">🔑 Headers</h3>
+                    <pre id="docHeaders" class="bg-slate-50 border border-slate-200 text-slate-800 p-3 rounded font-mono text-sm overflow-x-auto whitespace-pre-wrap"></pre>
                 </section>
 
-                <section class="doc-section">
-                    <h3>📤 Request body (JSON)</h3>
-                    <pre id="docRequest" class="code-block code-json"></pre>
-                    <div id="docFields" class="field-list hidden">
-                        <h4>Mô tả các trường</h4>
-                        <ul id="docFieldList"></ul>
+                <section class="mt-6 pb-5 border-b border-slate-200">
+                    <h3 class="text-sm font-semibold mb-2">📤 Body (request)</h3>
+                    <pre id="docRequest" class="bg-slate-900 text-slate-100 p-3 rounded font-mono text-sm overflow-x-auto max-h-72 overflow-y-auto"></pre>
+                </section>
+
+                <section id="fieldsSection" class="mt-6 pb-5 border-b border-slate-200">
+                    <h3 class="text-sm font-semibold mb-2">📋 Mô tả các field</h3>
+                    <div class="overflow-x-auto rounded border border-slate-200">
+                        <table id="fieldsTable" class="w-full text-sm">
+                            <thead class="bg-slate-50 text-xs uppercase tracking-wider text-slate-500">
+                                <tr>
+                                    <th class="text-left px-3 py-2 font-semibold">Field</th>
+                                    <th class="text-left px-3 py-2 font-semibold">Kiểu</th>
+                                    <th class="text-left px-3 py-2 font-semibold">Bắt buộc</th>
+                                    <th class="text-left px-3 py-2 font-semibold">Mô tả</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-slate-100"></tbody>
+                        </table>
                     </div>
                 </section>
 
-                <section class="doc-section">
-                    <h3>📥 Response (JSON)</h3>
-                    <pre id="docResponse" class="code-block code-json"></pre>
+                <section class="mt-6 pb-5 border-b border-slate-200">
+                    <h3 class="text-sm font-semibold mb-2">📥 Response</h3>
+                    <pre id="docResponse" class="bg-slate-900 text-slate-100 p-3 rounded font-mono text-sm overflow-x-auto max-h-80 overflow-y-auto"></pre>
                 </section>
 
-                <section class="doc-section">
-                    <h3>🧪 Ví dụ khác</h3>
-                    <div id="docMoreExamples"></div>
+                <section class="mt-6 pb-5 border-b border-slate-200">
+                    <h3 class="text-sm font-semibold mb-2">💻 cURL — copy &amp; chạy ngay</h3>
+                    <pre id="docCurl" class="bg-slate-900 text-slate-100 p-3 rounded font-mono text-xs overflow-x-auto"></pre>
+                    <button id="copyCurl" class="mt-2 px-3 py-1.5 text-sm border border-slate-300 hover:bg-slate-50 rounded transition-colors">Copy cURL</button>
                 </section>
 
-                <section class="doc-section">
-                    <h3>💻 cURL</h3>
-                    <pre id="docCurl" class="code-block"></pre>
-                    <button id="copyCurl" class="ghost">Copy cURL</button>
+                <section id="examplesSection" class="mt-6">
+                    <h3 class="text-sm font-semibold mb-2">🧪 Ví dụ khác</h3>
+                    <div id="docMoreExamples" class="space-y-3"></div>
                 </section>
             </article>
         </main>
     </div>
 
-    <div id="toasts"></div>
+    <div id="toasts" class="fixed top-4 right-4 z-[100] flex flex-col gap-2 pointer-events-none"></div>
     <script src="/explorer.js"></script>
 </body>
 </html>

@@ -6,7 +6,8 @@ const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
 
 function toast(message, kind = "info") {
     const el = document.createElement("div");
-    el.className = `toast ${kind}`;
+    const palette = { info: "bg-slate-800", success: "bg-green-600", error: "bg-red-600" };
+    el.className = `${palette[kind] ?? palette.info} text-white px-4 py-2 rounded-md shadow-lg text-sm pointer-events-auto animate-fadeIn`;
     el.textContent = message;
     $("#toasts").appendChild(el);
     setTimeout(() => el.remove(), 4000);
@@ -54,10 +55,17 @@ $("#logoutBtn")?.addEventListener("click", async (ev) => {
 
 // ----- Tabs -------------------------------------------------------
 
-$$(".tab").forEach((tab) => {
+$$(".tab-trigger").forEach((tab) => {
     tab.addEventListener("click", () => {
         const target = tab.dataset.tab;
-        $$(".tab").forEach((t) => t.classList.toggle("active", t === tab));
+        $$(".tab-trigger").forEach((t) => {
+            const active = t === tab;
+            t.classList.toggle("border-primary-600", active);
+            t.classList.toggle("text-primary-600", active);
+            t.classList.toggle("border-transparent", !active);
+            t.classList.toggle("text-slate-500", !active);
+            t.classList.toggle("hover:text-slate-900", !active);
+        });
         $$(".tab-panel").forEach((p) =>
             p.classList.toggle("hidden", p.dataset.panel !== target),
         );
