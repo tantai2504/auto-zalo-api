@@ -4,8 +4,35 @@ import { getAccountById } from "../db/accounts.js";
 import { sessions } from "../zalo/manager.js";
 import { fail, failFromError, failValidation, ok } from "../http/response.js";
 import { loadSignatures } from "../zalo/parseSignatures.js";
+import { findByPhone, sendByPhone } from "../zalo/contacts.js";
 
 export const apiRouter: Router = Router();
+
+/**
+ * Convenience wrappers exposed as if they were native methods. They call
+ * `findUser` + `sendMessage` underneath but accept a phone number directly,
+ * with VN phone-format auto-fallback (`0xxx`, `84xxx`, `+84xxx`).
+ *
+ * Show up in the catalog under "User & Account" and "Messaging" so they
+ * appear in the docs alongside the real methods.
+ */
+type ZaloApi = Parameters<typeof findByPhone>[0];
+type Handler = (api: ZaloApi, args: unknown[]) => Promise<unknown>;
+
+const VIRTUAL_METHODS: Record<string, { paramNames: string[]; handler: Handler }> = {
+    findByPhone: {
+        paramNames: ["phoneNumber"],
+        handler: (api, args) => findByPhone(api, String(args[0] ?? "")),
+    },
+    sendByPhone: {
+        paramNames: ["phoneNumber", "message"],
+        handler: (api, args) =>
+            sendByPhone(api, {
+                phone: String(args[0] ?? ""),
+                message: args[1] as string | Record<string, unknown>,
+            }),
+    },
+};
 
 /**
  * Generic Zalo method proxy.
@@ -54,13 +81,20 @@ apiRouter.post("/:accountId/:method", async (req, res) => {
     }
 
     try {
-        const api = (await sessions.get(account.id)) as unknown as Record<string, unknown>;
-        const fn = api[params.data.method];
+        const api = await sessions.get(account.id);
+        const virtual = VIRTUAL_METHODS[params.data.method];
+        if (virtual) {
+            const result = await virtual.handler(api as ZaloApi, transformed);
+            ok(res, result, 200, started);
+            return;
+        }
+        const apiAsRecord = api as unknown as Record<string, unknown>;
+        const fn = apiAsRecord[params.data.method];
         if (typeof fn !== "function") {
             return fail(res, "NOT_FOUND", `Method '${params.data.method}' not found on api`);
         }
         const result = await Promise.resolve(
-            (fn as (...a: unknown[]) => unknown).apply(api, transformed),
+            (fn as (...a: unknown[]) => unknown).apply(apiAsRecord, transformed),
         );
         ok(res, result, 200, started);
     } catch (err) {
@@ -116,8 +150,9 @@ function transformBody(body: unknown, method: string): unknown[] | null {
 
 const paramNameCache = new Map<string, string[]>();
 
-/** Look up the positional param names of a method, parsed from its TS signature. */
+/** Look up the positional param names of a method (real or virtual). */
 function paramNamesOf(method: string): string[] | null {
+    if (VIRTUAL_METHODS[method]) return VIRTUAL_METHODS[method].paramNames;
     if (paramNameCache.has(method)) return paramNameCache.get(method)!;
     const sig = loadSignatures()[method];
     if (!sig) return null;

@@ -10,7 +10,6 @@ import { authRouter } from "./routes/auth.js";
 import { accountsRouter } from "./routes/accounts.js";
 import { apiRouter } from "./routes/api.js";
 import { methodsRouter } from "./routes/methods.js";
-import { quickRouter } from "./routes/quick.js";
 import { adminRouter } from "./routes/admin.js";
 import { apiKeysRouter } from "./routes/apiKeys.js";
 import { fail, ok as okEnvelope } from "./http/response.js";
@@ -92,16 +91,29 @@ async function main(): Promise<void> {
     // API key management (admin-cookie protected internally).
     app.use("/admin/api-keys", makeRateLimiter(), apiKeysRouter);
 
-    // ----- Protected endpoints (rate-limited + admin cookie OR API_KEY) ---
+    // ----- Routes -----
     // All data endpoints mount under config.API_PREFIX (default "" = root).
     // Set API_PREFIX="/api/v1" in env to version everything.
+    //
+    // Auth model:
+    //   - Management endpoints (/auth, /accounts, /methods) → admin cookie required.
+    //     Used by the dashboard UI to add/list/edit accounts.
+    //   - Data endpoints (/api/{accountId}/*, /quick/{accountId}/*) → OPEN.
+    //     The accountId UUID itself is the credential — anyone who knows it
+    //     can call methods on that account. Keep the UUID secret.
+    //
+    // Both groups still go through the rate limiter to mitigate brute-force
+    // and abuse. If you need stricter protection, put the whole service behind
+    // a reverse proxy with IP allowlist or basic auth.
     const P = config.API_PREFIX;
     const guarded = [makeRateLimiter(), requireAuth];
     app.use(`${P}/methods`, cacheControl(300), ...guarded, methodsRouter);
     app.use(`${P}/auth`, ...guarded, authRouter);
     app.use(`${P}/accounts`, ...guarded, accountsRouter);
-    app.use(`${P}/quick`, ...guarded, quickRouter);
-    app.use(`${P}/api`, ...guarded, apiRouter);
+
+    // Data endpoints — only rate-limited, no auth. accountId in URL = credential.
+    const open = [makeRateLimiter()];
+    app.use(`${P}/api`, ...open, apiRouter);
 
     // ----- Static UI --------------------------------------------------
     app.use(express.static(PUBLIC_DIR, { index: "index.html" }));

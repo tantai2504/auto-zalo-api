@@ -258,10 +258,10 @@ const DOCS: Record<string, MethodDoc> = {
         examples: [{ summary: "Get own id", args: [] }],
     },
     findUser: {
-        description: "Tìm user theo số điện thoại.",
+        description: "Tìm user theo số điện thoại (chính xác đúng định dạng).",
         fields: [
             { name: "phoneNumber", type: "string", required: true,
-              description: "SĐT định dạng +84..., 0..., hoặc 84..." },
+              description: "SĐT cần đúng định dạng Zalo nhận (thường là +84... không có dấu)." },
             { name: "avatarSize", type: "string", required: false, description: "Kích cỡ avatar URL." },
         ],
         sampleResponse: {
@@ -273,7 +273,49 @@ const DOCS: Record<string, MethodDoc> = {
             gender: 0,
             globalId: "...",
         },
-        examples: [{ summary: "Tìm SĐT", args: ["+84..."] }],
+        examples: [{ summary: "Tìm theo SĐT (đúng format Zalo)", args: ["+84..."] }],
+    },
+    findByPhone: {
+        description:
+            "Tìm user theo SĐT — TỰ ĐỘNG thử các định dạng (+84..., 0..., 84...). " +
+            "Khuyến nghị dùng thay cho findUser vì không cần lo định dạng SĐT.",
+        fields: [
+            { name: "phoneNumber", type: "string", required: true,
+              description: "SĐT — bất kỳ định dạng phổ biến nào: +84xxx, 0xxx, 84xxx." },
+        ],
+        sampleResponse: {
+            phone: "+84779174220",
+            user: {
+                uid: "1234567890",
+                display_name: "Nguyễn Văn A",
+                avatar: "https://...",
+            },
+        },
+        examples: [
+            { summary: "Format +84", args: ["+84779174220"] },
+            { summary: "Format VN (0...)", args: ["0779174220"] },
+        ],
+    },
+    sendByPhone: {
+        description:
+            "Gửi tin 1-1 cho user theo SĐT. Server tự tìm user (auto-format SĐT) " +
+            "rồi gọi sendMessage. Tiện khi không biết userId.",
+        fields: [
+            { name: "phoneNumber", type: "string", required: true,
+              description: "SĐT người nhận — bất kỳ định dạng: +84xxx, 0xxx, 84xxx." },
+            { name: "message", type: "string | object", required: true,
+              description: "Nội dung tin. String đơn giản hoặc object MessageContent {msg, mentions, ...}." },
+        ],
+        sampleResponse: {
+            phone: "+84779174220",
+            user: { uid: "1234567890", display_name: "Nguyễn Văn A" },
+            sendResult: { message: { msgId: "5894..." }, attachment: [] },
+        },
+        examples: [
+            { summary: "Tin text đơn giản", args: ["+84779174220", "Xin chào"] },
+            { summary: "Format VN (0...)", args: ["0779174220", "Tin từ script"] },
+            { summary: "Tin rich content", args: ["+84779174220", { msg: "Xem này", urgency: 1 }] },
+        ],
     },
     findUserByUsername: { description: "Tìm user theo username (@xxx)." },
     updateProfile: {
@@ -579,13 +621,19 @@ function parseParamNames(paramsStr: string): string[] {
     });
 }
 
+/** Virtual-method signatures — methods we expose ourselves (not from zca-js). */
+const VIRTUAL_PARAMS: Record<string, string> = {
+    findByPhone: "(phoneNumber: string)",
+    sendByPhone: "(phoneNumber: string, message: string | MessageContent)",
+};
+
 export function getMethodDocs(name: string): MethodFullDoc | null {
     const cat = METHOD_CATALOG.find((m) => m.name === name);
     const sigs = loadSignatures();
     const sig = sigs[name];
     const doc = DOCS[name];
     if (!cat && !sig) return null;
-    const params = sig?.params ?? "(...args)";
+    const params = VIRTUAL_PARAMS[name] ?? sig?.params ?? "(...args)";
     const paramNames = parseParamNames(params);
     return {
         name,
