@@ -219,7 +219,7 @@ async function selectMethod(name) {
 }
 
 function effectiveAccountId() {
-    return selectedAccountId || "<accountId>";
+    return selectedAccountId || "{accountId}";
 }
 
 /**
@@ -263,9 +263,16 @@ function renderMethodPanel(doc) {
     const fullPath = apiUrl(`/api/${accId}/${doc.name}`);
     const fullUrl = location.origin + fullPath;
 
-    // 1. URL
+    // 1. URL — when no account chosen, render `{accountId}` highlighted as placeholder
+    const urlHtml = escapeHtml(fullUrl).replace(
+        /\{accountId\}/,
+        '<span class="bg-amber-100 text-amber-700 px-1 py-0.5 rounded font-bold">{accountId}</span>',
+    );
+    const placeholderNote = !selectedAccountId
+        ? `<div class="text-xs text-amber-700 mt-2">💡 Thay <code class="bg-amber-100 px-1 py-0.5 rounded">{accountId}</code> bằng UUID account của bạn (lấy ở <a href="/" class="underline">trang Tài khoản</a>) — hoặc chọn account ở sidebar để URL tự fill.</div>`
+        : "";
     $("#docUrl").innerHTML =
-        `<span class="bg-primary-600 text-white px-2 py-0.5 rounded text-[11px] font-bold tracking-wider mr-2">POST</span>${escapeHtml(fullUrl)}`;
+        `<span class="bg-primary-600 text-white px-2 py-0.5 rounded text-[11px] font-bold tracking-wider mr-2">POST</span>${urlHtml}${placeholderNote}`;
 
     // 2. Body — first example
     const examples = doc.examples?.length ? doc.examples : [{ summary: "Default", args: [] }];
@@ -349,8 +356,16 @@ $("#copyCurl").addEventListener("click", async () => {
 });
 
 // ---- Init ----
-loadKey();
 (async () => {
-    await Promise.all([loadAccounts(), loadMethods()]);
-    if (allMethods.find((m) => m.name === "sendMessage")) selectMethod("sendMessage");
+    // Methods is the critical path — always load even if accounts fail.
+    // Accounts fail (e.g. no admin login on a bare deployment) shouldn't block docs.
+    await loadMethods();
+    void loadAccounts();
+    // Always auto-open a method so docs are visible immediately. Prefer sendMessage,
+    // else first popular, else first method.
+    const auto =
+        allMethods.find((m) => m.name === "sendMessage") ??
+        allMethods.find((m) => POPULAR_METHODS.includes(m.name)) ??
+        allMethods[0];
+    if (auto) selectMethod(auto.name);
 })();

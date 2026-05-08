@@ -81,7 +81,39 @@
                 <section class="mt-6 pb-5 border-b border-slate-200">
                     <h3 class="text-sm font-semibold mb-2">📍 URL</h3>
                     <pre id="docUrl" class="bg-slate-50 border border-slate-200 text-slate-800 p-3 rounded font-mono text-sm overflow-x-auto"></pre>
-                    <p class="text-xs text-slate-500 mt-2">Header duy nhất cần: <code class="bg-slate-100 px-1 py-0.5 rounded">Content-Type: application/json</code>. Không cần auth.</p>
+                </section>
+
+                <section class="mt-6 pb-5 border-b border-slate-200">
+                    <h3 class="text-sm font-semibold mb-2">🔑 Headers &amp; Auth</h3>
+                    <table class="w-full text-sm border border-slate-200 rounded overflow-hidden">
+                        <thead class="bg-slate-50 text-xs uppercase tracking-wider text-slate-500">
+                            <tr>
+                                <th class="text-left px-3 py-2 font-semibold">Header</th>
+                                <th class="text-left px-3 py-2 font-semibold">Bắt buộc</th>
+                                <th class="text-left px-3 py-2 font-semibold">Giá trị</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-100">
+                            <tr>
+                                <td class="px-3 py-2"><code class="bg-primary-50 text-primary-700 border border-primary-200 px-2 py-0.5 rounded text-xs font-mono">Content-Type</code></td>
+                                <td class="px-3 py-2"><span class="text-green-700 font-bold">✓</span></td>
+                                <td class="px-3 py-2 font-mono text-xs text-slate-700">application/json</td>
+                            </tr>
+                            <tr>
+                                <td class="px-3 py-2"><code class="bg-slate-100 text-slate-500 border border-slate-200 px-2 py-0.5 rounded text-xs font-mono line-through">Authorization</code></td>
+                                <td class="px-3 py-2"><span class="text-slate-400">—</span></td>
+                                <td class="px-3 py-2 text-xs text-slate-500 italic">không cần — accountId trong URL là đủ</td>
+                            </tr>
+                            <tr>
+                                <td class="px-3 py-2"><code class="bg-slate-100 text-slate-500 border border-slate-200 px-2 py-0.5 rounded text-xs font-mono line-through">X-API-Key</code></td>
+                                <td class="px-3 py-2"><span class="text-slate-400">—</span></td>
+                                <td class="px-3 py-2 text-xs text-slate-500 italic">không cần</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                    <p class="text-xs text-slate-500 mt-2">
+                        ⚠️ Account ID là credential — đừng leak ra ngoài (logs, screenshot, public URL).
+                    </p>
                 </section>
 
                 <section class="mt-6 pb-5 border-b border-slate-200">
