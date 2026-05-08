@@ -5,8 +5,47 @@ import { runQrLogin } from "../zalo/qrLogin.js";
 import { decodeTokenPayload, loginWithToken } from "../zalo/tokenLogin.js";
 import { logger } from "../logger.js";
 import { fail, failFromError, failValidation, ok } from "../http/response.js";
+import { validateRequestApiKey } from "../http/admin.js";
+import { issueSessionToken, isSessionTokenEnabled } from "../http/sessionToken.js";
 
 export const authRouter: Router = Router();
+
+/**
+ * POST /auth/session
+ *
+ * Exchange an API key (header `Authorization: Bearer <key>` or `X-API-Key`)
+ * for a short-lived session token (15 min, HMAC-signed).
+ *
+ * Why: subsequent requests using the session token skip the DB lookup —
+ * just an HMAC verify. ~10× faster for high-volume programmatic clients.
+ *
+ * Re-issue: when the token is near expiry (or you get 401), call this again.
+ *
+ * Note: this endpoint is OUTSIDE the admin/api-key guard but still requires
+ * a valid API key in the request — anyone with the key can mint tokens.
+ */
+authRouter.post("/session", async (req, res) => {
+    if (!isSessionTokenEnabled()) {
+        return fail(res, "VALIDATION_ERROR", "SESSION_SECRET không được cấu hình — không thể issue session token");
+    }
+    const auth = await validateRequestApiKey(req);
+    if (!auth) {
+        return fail(res, "UNAUTHORIZED", "Cần API key hợp lệ để đổi session token");
+    }
+    if (auth.source === "session") {
+        return fail(res, "VALIDATION_ERROR", "Đã có session token rồi, không cần đổi tiếp");
+    }
+    const sub = auth.source === "env" ? "env-master" : auth.keyDoc._id;
+    const issued = issueSessionToken(sub);
+    if (!issued) {
+        return fail(res, "INTERNAL_ERROR", "Không issue được session token");
+    }
+    ok(res, {
+        token: issued.token,
+        expiresAt: issued.expiresAt,
+        ttlSec: Math.floor((issued.expiresAt - Date.now()) / 1000),
+    });
+});
 
 /** POST /auth/qr — start a new QR login session, return its id immediately. */
 authRouter.post("/qr", async (_req, res) => {

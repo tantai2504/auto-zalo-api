@@ -58,6 +58,7 @@ Thất bại:
 | `GET  /health`                                    | —    | Health + Mongo ping + pool size            |
 | `POST /admin/login`                               | —    | Đăng nhập admin (UI cookie session)        |
 | `POST /admin/logout` + `GET /admin/me`            | —    | Logout / whoami                            |
+| `POST /auth/session`                              | ✅   | Đổi API key → session token (15 min, fast) |
 | `POST /auth/qr` + `GET /auth/qr/{id}`             | ✅   | Đăng nhập 1 tài khoản Zalo bằng QR         |
 | `POST /auth/token`                                | ✅   | Đăng nhập bằng z_uuid + zpw_sek            |
 | `GET  /accounts`                                  | ✅   | Liệt kê account                            |
@@ -199,6 +200,101 @@ cPanel hosting thường không cài sẵn MongoDB. 2 cách:
 - [ ] Tweak `RATE_LIMIT_MAX` theo lượng tải dự kiến
 - [ ] Monitor `GET /health` — set up uptime check (UptimeRobot, BetterStack, etc.)
 - [ ] Log rotation tự động (cPanel thường handle qua Phusion log)
+
+## Tối ưu auth: session token (cho client gọi nhiều)
+
+API key (`zk_…`) phải hash SHA-256 + lookup MongoDB mỗi request. Đã có cache 60s
+nên thường <1ms, nhưng vẫn tốn tài nguyên khi client gọi liên tục.
+
+**Session token** = HMAC-signed payload, **không cần DB**, verify bằng SESSION_SECRET.
+Mỗi lần verify chỉ ~0.1ms — **nhanh hơn 25-50%** trong tải bình thường, **>10×**
+khi cache miss.
+
+### Flow
+
+```sh
+# 1) Đổi API key 1 lần → session token (15 min)
+curl -X POST -H "X-API-Key: zk_xxx..." \
+  https://your.host/auth/session
+# response:
+# { "ok": true, "data": { "token": "eyJ...xyz", "expiresAt": 1735..., "ttlSec": 899 } }
+
+# 2) Mọi request sau dùng token:
+curl -H "Authorization: Bearer eyJ...xyz" \
+  https://your.host/accounts
+
+# 3) Khi 401 (token hết hạn) hoặc gần hết → đổi lại
+```
+
+### Client helper (TypeScript)
+
+```ts
+class ZaloAutoClient {
+    private token: string | null = null;
+    private exp = 0;
+
+    constructor(private base: string, private apiKey: string) {}
+
+    async ensureToken() {
+        // refresh khi còn <60s
+        if (!this.token || Date.now() > this.exp - 60_000) {
+            const r = await fetch(`${this.base}/auth/session`, {
+                method: "POST",
+                headers: { "X-API-Key": this.apiKey },
+            });
+            const env = await r.json();
+            if (!env.ok) throw new Error(env.error.message);
+            this.token = env.data.token;
+            this.exp = env.data.expiresAt;
+        }
+        return this.token!;
+    }
+
+    async call(path: string, opts: RequestInit = {}) {
+        const token = await this.ensureToken();
+        const r = await fetch(`${this.base}${path}`, {
+            ...opts,
+            headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${token}`,
+                ...opts.headers,
+            },
+        });
+        if (r.status === 401) {
+            // Token hết hạn giữa chừng — clear, retry 1 lần
+            this.token = null;
+            const t2 = await this.ensureToken();
+            return fetch(`${this.base}${path}`, {
+                ...opts,
+                headers: { "Content-Type": "application/json", Authorization: `Bearer ${t2}`, ...opts.headers },
+            });
+        }
+        return r;
+    }
+}
+
+// Usage
+const client = new ZaloAutoClient("https://api.your.host", process.env.ZALO_AUTO_KEY!);
+const r = await client.call("/accounts");
+console.log(await r.json());
+```
+
+### Khi nào nên dùng
+
+| | API key trực tiếp | Session token |
+|---|---|---|
+| 1 request đơn lẻ (cron, webhook) | ✅ Đơn giản | ❌ Thừa step |
+| Hàng chục → ngàn request liên tục | ⚠ Chậm hơn | ✅ Khuyến nghị |
+| Browser app | ⚠ Lộ key trong network | ✅ Token có TTL |
+| Backwards compat (code cũ) | ✅ | — |
+
+### Bảo mật
+
+- Token ký bằng `SESSION_SECRET` (cùng secret với admin cookie)
+- TTL 15 phút mặc định — đổi `SESSION_SECRET` để invalidate **ngay lập tức** mọi token đã issue
+- Token chứa `sub` = id của API key gốc → audit được key nào cấp token nào
+- Token là stateless — không revocable trước khi hết hạn (đó là trade-off của JWT-style)
+- Quy trình revoke tức thì: revoke API key + đổi `SESSION_SECRET` + restart app
 
 ## Realtime events (Listener + WebSocket + Webhook)
 

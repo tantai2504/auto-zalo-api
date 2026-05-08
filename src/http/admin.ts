@@ -3,6 +3,7 @@ import type { Request, RequestHandler, Response } from "express";
 import { config } from "../config.js";
 import { fail } from "./response.js";
 import { validateDbApiKey } from "./apiKeyAuth.js";
+import { looksLikeSessionToken, verifySessionToken } from "./sessionToken.js";
 import type { ApiKeyDoc } from "../db/apiKeys.js";
 
 /**
@@ -99,17 +100,34 @@ export function hasMasterApiKey(req: Request): boolean {
 }
 
 /**
- * Validate a request's API key against either the env master key or the DB.
- * Returns a marker object: { source: "env" | "db", keyDoc? } or null.
+ * Validate a request's API key/session-token against:
+ *   1. Session token   — HMAC verify, no DB (fast path, ~0.1ms)
+ *   2. Env master key  — constant-time string compare
+ *   3. DB-stored key   — SHA-256 lookup, cached 60s
+ *
+ * Returns a marker object describing the source, or null if no valid auth.
  */
 export async function validateRequestApiKey(
     req: Request,
-): Promise<{ source: "env" } | { source: "db"; keyDoc: ApiKeyDoc } | null> {
+): Promise<
+    | { source: "session"; sub: string }
+    | { source: "env" }
+    | { source: "db"; keyDoc: ApiKeyDoc }
+    | null
+> {
     const raw = extractApiKey(req);
     if (!raw) return null;
+    // 1. Session token first — cheapest check, no DB.
+    if (looksLikeSessionToken(raw)) {
+        const payload = verifySessionToken(raw);
+        if (payload) return { source: "session", sub: payload.sub };
+        // Falls through — maybe it's still a base64-ish API key without zk_ prefix.
+    }
+    // 2. Env master key.
     if (config.API_KEY && constantTimeStringEq(raw, config.API_KEY)) {
         return { source: "env" };
     }
+    // 3. DB-stored API key.
     const keyDoc = await validateDbApiKey(raw);
     if (keyDoc) return { source: "db", keyDoc };
     return null;

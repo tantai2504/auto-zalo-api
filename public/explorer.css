@@ -20,29 +20,33 @@
     top: 24px;
 }
 
-.auth-info {
-    background: rgba(0, 104, 255, 0.06);
+.key-input {
+    background: rgba(0, 104, 255, 0.05);
     border: 1px solid rgba(0, 104, 255, 0.2);
     border-radius: 6px;
     padding: 10px 12px;
     margin-bottom: 12px;
 }
-.auth-info-title {
-    font-weight: 600;
-    font-size: 13px;
-    color: var(--primary);
-    margin-bottom: 4px;
-}
-.auth-info-body {
+.key-input label {
+    display: grid;
+    gap: 4px;
     font-size: 12px;
     color: var(--text);
-    line-height: 1.5;
+    font-weight: 500;
 }
-.auth-info-body code {
-    background: rgba(0, 0, 0, 0.06);
-    padding: 1px 4px;
-    border-radius: 3px;
+.key-input input {
+    padding: 6px 10px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    font-size: 12px;
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    background: #fff;
+}
+.key-input input:focus { outline: 2px solid rgba(0,104,255,0.3); border-color: var(--primary); }
+.key-input p {
+    margin: 6px 0 0;
     font-size: 11px;
+    line-height: 1.5;
 }
 
 .account-picker {
@@ -256,6 +260,61 @@
     margin: 0 0 10px;
 }
 
+.fields-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    overflow: hidden;
+}
+.fields-table thead { background: var(--card); }
+.fields-table th {
+    text-align: left;
+    padding: 8px 12px;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    color: var(--muted);
+    letter-spacing: 0.04em;
+    border-bottom: 1px solid var(--border);
+}
+.fields-table td {
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+    line-height: 1.5;
+}
+.fields-table tbody tr:last-child td { border-bottom: none; }
+.fields-table .field-name {
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    background: var(--card);
+    border: 1px solid var(--border);
+    padding: 1px 8px;
+    border-radius: 3px;
+    font-size: 12px;
+    color: var(--primary);
+    font-weight: 600;
+    display: inline-block;
+}
+.fields-table .field-name.nested {
+    color: #6f42c1;
+    margin-left: 12px;
+}
+.fields-table .field-type {
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: 11px;
+    color: #6f42c1;
+}
+.fields-table .field-req-yes {
+    color: var(--success);
+    font-weight: 700;
+}
+.fields-table .field-req-no {
+    color: var(--muted);
+}
+
 .field-list {
     background: var(--bg);
     border: 1px solid var(--border);
@@ -290,11 +349,28 @@
     font-size: 11px;
     color: var(--primary);
 }
+.field-key {
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    background: var(--card);
+    border: 1px solid var(--border);
+    padding: 1px 8px;
+    border-radius: 3px;
+    font-size: 12px;
+    color: var(--primary);
+    font-weight: 600;
+}
 .field-name { font-weight: 600; color: var(--text); }
 .field-opt {
     font-size: 11px;
     color: var(--muted);
     background: rgba(247, 181, 3, 0.1);
+    padding: 1px 6px;
+    border-radius: 3px;
+}
+.field-req {
+    font-size: 11px;
+    color: var(--danger);
+    background: rgba(214, 51, 79, 0.1);
     padding: 1px 6px;
     border-radius: 3px;
 }

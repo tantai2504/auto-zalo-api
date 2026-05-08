@@ -3,7 +3,8 @@ const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
 
 function toast(msg, kind = "info") {
     const el = document.createElement("div");
-    el.className = `toast ${kind}`;
+    const palette = { info: "bg-slate-800", success: "bg-green-600", error: "bg-red-600" };
+    el.className = `${palette[kind] ?? palette.info} text-white px-4 py-2 rounded-md shadow-lg text-sm pointer-events-auto animate-fadeIn`;
     el.textContent = msg;
     $("#toasts").appendChild(el);
     setTimeout(() => el.remove(), 4000);
@@ -88,27 +89,37 @@ function renderKeys(keys) {
     const tbody = $("#keysTable tbody");
     tbody.innerHTML = "";
     $("#emptyHint").classList.toggle("hidden", keys.length > 0);
+    const statusColor = {
+        active: "bg-green-100 text-green-700",
+        expired: "bg-amber-100 text-amber-700",
+        revoked: "bg-red-100 text-red-700",
+    };
     for (const k of keys) {
         const tr = document.createElement("tr");
+        tr.className = "hover:bg-slate-50 transition-colors";
+        const dangerCls = k.status === "revoked"
+            ? "px-3 py-1 text-xs bg-slate-200 text-slate-400 rounded cursor-not-allowed"
+            : "px-3 py-1 text-xs bg-red-600 hover:bg-red-700 text-white rounded transition-colors";
         tr.innerHTML = `
-            <td>
-                <div class="contact-name">${escapeHtml(k.name)}</div>
-                <div class="contact-phone">by ${escapeHtml(k.createdBy)}</div>
+            <td class="px-4 py-3">
+                <div class="font-medium text-slate-900">${escapeHtml(k.name)}</div>
+                <div class="text-xs text-slate-500 mt-0.5">by ${escapeHtml(k.createdBy)}</div>
             </td>
-            <td class="uid">${escapeHtml(k.keyPreview)}</td>
-            <td><span class="badge ${k.status}">${k.status}</span></td>
-            <td title="${k.expiresAt ? fmtDate(k.expiresAt) : 'Never'}">${
+            <td class="px-4 py-3 font-mono text-xs text-slate-600">${escapeHtml(k.keyPreview)}</td>
+            <td class="px-4 py-3"><span class="${statusColor[k.status] ?? "bg-slate-100 text-slate-500"} px-2 py-0.5 rounded text-xs font-semibold uppercase">${k.status}</span></td>
+            <td class="px-4 py-3 text-xs">${
                 k.expiresAt
-                    ? `<div>${fmtDate(k.expiresAt)}</div><div class="contact-phone">${fmtRelative(k.expiresAt)}</div>`
-                    : "—"
+                    ? `<div class="text-slate-700">${fmtDate(k.expiresAt)}</div><div class="text-slate-500">${fmtRelative(k.expiresAt)}</div>`
+                    : '<span class="text-slate-400">—</span>'
             }</td>
-            <td>${fmtDate(k.lastUsedAt)}</td>
-            <td>${fmtDate(k.createdAt)}</td>
-            <td class="actions">
-                <button class="danger" data-action="revoke" ${k.status === "revoked" ? "disabled" : ""}>Revoke</button>
+            <td class="px-4 py-3 text-xs text-slate-600">${fmtDate(k.lastUsedAt)}</td>
+            <td class="px-4 py-3 text-xs text-slate-600">${fmtDate(k.createdAt)}</td>
+            <td class="px-4 py-3 text-right">
+                <button class="${dangerCls}" data-action="revoke" ${k.status === "revoked" ? "disabled" : ""}>Revoke</button>
             </td>
         `;
-        tr.querySelector('[data-action="revoke"]').addEventListener("click", () => revokeKey(k));
+        const btn = tr.querySelector('[data-action="revoke"]');
+        if (btn && !btn.disabled) btn.addEventListener("click", () => revokeKey(k));
         tbody.appendChild(tr);
     }
 }

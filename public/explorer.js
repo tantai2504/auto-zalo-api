@@ -1,9 +1,13 @@
 const $ = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
 
+const KEY_STORAGE = "zaloAutoApiKey";
+const ACC_STORAGE = "zaloAutoSelectedAcc";
+
 function toast(msg, kind = "info") {
     const el = document.createElement("div");
-    el.className = `toast ${kind}`;
+    const palette = { info: "bg-slate-800", success: "bg-green-600", error: "bg-red-600" };
+    el.className = `${palette[kind] ?? palette.info} text-white px-4 py-2 rounded-md shadow-lg text-sm pointer-events-auto animate-fadeIn`;
     el.textContent = msg;
     $("#toasts").appendChild(el);
     setTimeout(() => el.remove(), 4000);
@@ -38,7 +42,6 @@ async function callApi(path, opts = {}) {
     return env.data;
 }
 
-// ---- Vietnamese labels for category groups ----
 const CATEGORY_VI = {
     Messaging: { label: "Nhắn tin", icon: "💬" },
     "Friend Management": { label: "Quản lý bạn bè", icon: "🤝" },
@@ -54,10 +57,30 @@ const CATEGORY_VI = {
     Other: { label: "Khác", icon: "📦" },
 };
 
+/**
+ * Methods pinned to the top of the sidebar — sorted by frequency of real use.
+ * These appear under a "⭐ Hay dùng" pseudo-category before the regular ones.
+ */
+const POPULAR_METHODS = [
+    "fetchAccountInfo",
+    "getOwnId",
+    "getAllGroups",
+    "getGroupInfo",
+    "getGroupMembersInfo",
+    "getAllFriends",
+    "getUserInfo",
+    "findUser",
+    "sendMessage",
+    "addUserToGroup",
+    "removeUserFromGroup",
+    "createGroup",
+];
+
 let allMethods = [];
 let groupedMethods = [];
 let selectedMethod = null;
 let selectedAccountId = "";
+let savedApiKey = "";
 
 // ---- Logout ----
 $("#logoutBtn").addEventListener("click", async (ev) => {
@@ -66,7 +89,53 @@ $("#logoutBtn").addEventListener("click", async (ev) => {
     location.href = "/login.html";
 });
 
-// ---- Account picker (dùng để in trong ví dụ) ----
+// ---- API key persisted in localStorage ----
+function loadKey() {
+    try {
+        savedApiKey = localStorage.getItem(KEY_STORAGE) || "";
+        if (savedApiKey) $("#apiKeyInput").value = savedApiKey;
+    } catch {}
+}
+function saveKey() {
+    try {
+        if (savedApiKey) localStorage.setItem(KEY_STORAGE, savedApiKey);
+        else localStorage.removeItem(KEY_STORAGE);
+    } catch {}
+}
+$("#apiKeyInput").addEventListener("input", (e) => {
+    savedApiKey = e.target.value.trim();
+    saveKey();
+    if (selectedMethod) renderMethodPanel(selectedMethod);
+});
+
+// Click "session token" link → exchange API key for short-lived token,
+// then store it as the saved key. cURL examples auto-update.
+$("#getSessionTokenBtn").addEventListener("click", async (ev) => {
+    ev.preventDefault();
+    if (!savedApiKey) {
+        toast("Paste API key trước rồi mới đổi được session token", "error");
+        return;
+    }
+    try {
+        const r = await fetch("/auth/session", {
+            method: "POST",
+            headers: { "X-API-Key": savedApiKey },
+            credentials: "same-origin",
+        });
+        const env = await r.json();
+        if (!env.ok) throw new Error(env.error?.message ?? `HTTP ${r.status}`);
+        savedApiKey = env.data.token;
+        $("#apiKeyInput").value = savedApiKey;
+        saveKey();
+        if (selectedMethod) renderMethodPanel(selectedMethod);
+        const mins = Math.round(env.data.ttlSec / 60);
+        toast(`Đã đổi sang session token, hết hạn sau ${mins} phút`, "success");
+    } catch (err) {
+        toast(err.message, "error");
+    }
+});
+
+// ---- Account picker ----
 async function loadAccounts() {
     try {
         const data = await callApi("/accounts");
@@ -78,10 +147,15 @@ async function loadAccounts() {
             opt.textContent = `${a.displayName ?? a.uid}${a.phone ? ` (${a.phone})` : ""}`;
             sel.appendChild(opt);
         }
-        if (data.accounts[0]) {
+        // Try to restore previous selection
+        let saved = "";
+        try { saved = localStorage.getItem(ACC_STORAGE) || ""; } catch {}
+        if (saved && data.accounts.some((a) => a.id === saved)) {
+            selectedAccountId = saved;
+        } else if (data.accounts[0]) {
             selectedAccountId = data.accounts[0].id;
-            sel.value = selectedAccountId;
         }
+        sel.value = selectedAccountId;
         if (selectedMethod) renderMethodPanel(selectedMethod);
     } catch (err) {
         toast(err.message, "error");
@@ -90,6 +164,7 @@ async function loadAccounts() {
 
 $("#accountSelect").addEventListener("change", (e) => {
     selectedAccountId = e.target.value;
+    try { localStorage.setItem(ACC_STORAGE, selectedAccountId); } catch {}
     if (selectedMethod) renderMethodPanel(selectedMethod);
 });
 
@@ -112,7 +187,16 @@ function renderCategoryList(filter) {
     list.innerHTML = "";
     let visible = 0;
 
-    for (const grp of groupedMethods) {
+    // Build the "popular" pseudo-group from POPULAR_METHODS in declared order.
+    const popularGroup = {
+        category: "__popular",
+        methods: POPULAR_METHODS.map((name) => allMethods.find((m) => m.name === name)).filter(Boolean),
+    };
+    const groupsToRender = popularGroup.methods.length > 0
+        ? [popularGroup, ...groupedMethods]
+        : groupedMethods;
+
+    for (const grp of groupsToRender) {
         const matched = grp.methods.filter(
             (m) =>
                 !f ||
@@ -121,22 +205,35 @@ function renderCategoryList(filter) {
         );
         if (matched.length === 0) continue;
 
-        const meta = CATEGORY_VI[grp.category] ?? { label: grp.category, icon: "📦" };
-
+        const isPopular = grp.category === "__popular";
+        const meta = isPopular
+            ? { label: "Hay dùng", icon: "⭐" }
+            : CATEGORY_VI[grp.category] ?? { label: grp.category, icon: "📦" };
         const header = document.createElement("div");
-        header.className = "category-header";
-        header.innerHTML = `<span class="cat-icon">${meta.icon}</span><span class="cat-label">${escapeHtml(meta.label)}</span><span class="cat-count">${matched.length}</span>`;
+        header.className = isPopular
+            ? "sticky top-0 bg-amber-50 z-10 flex items-center gap-1.5 px-2 pt-3 pb-1 text-xs font-bold text-amber-700 -mx-2 mb-1"
+            : "sticky top-0 bg-white z-10 flex items-center gap-1.5 px-1 pt-3 pb-1 text-xs font-bold text-slate-700";
+        const countCls = isPopular
+            ? "text-[10px] font-medium bg-amber-200 text-amber-800 px-1.5 py-0.5 rounded-full"
+            : "text-[10px] font-medium bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded-full";
+        header.innerHTML = `
+            <span>${meta.icon}</span>
+            <span class="flex-1">${escapeHtml(meta.label)}</span>
+            <span class="${countCls}">${matched.length}</span>
+        `;
         list.appendChild(header);
 
         for (const m of matched) {
             const a = document.createElement("a");
-            a.className = "method-link";
             a.dataset.method = m.name;
+            const isActive = selectedMethod?.name === m.name;
+            a.className = isActive
+                ? "block px-2.5 py-1.5 rounded cursor-pointer no-underline border-l-2 border-primary-600 bg-primary-50 mb-px"
+                : "block px-2.5 py-1.5 rounded cursor-pointer no-underline border-l-2 border-transparent hover:bg-slate-50 mb-px";
             a.innerHTML = `
-                <span class="method-name">${escapeHtml(m.name)}</span>
-                <span class="method-blurb">${escapeHtml(shortDesc(m.description))}</span>
+                <span class="block font-mono text-[13px] font-medium ${isActive ? "text-primary-700" : "text-slate-900"}">${escapeHtml(m.name)}</span>
+                <span class="block text-[11px] text-slate-500 mt-0.5 leading-tight">${escapeHtml(shortDesc(m.description))}</span>
             `;
-            if (selectedMethod?.name === m.name) a.classList.add("active");
             a.addEventListener("click", (e) => {
                 e.preventDefault();
                 selectMethod(m.name);
@@ -156,14 +253,13 @@ function shortDesc(s) {
 
 $("#search").addEventListener("input", (e) => renderCategoryList(e.target.value));
 
-// ---- Render method panel (URL / Headers / Body / Response) ----
+// ---- Method selection ----
 async function selectMethod(name) {
     try {
         const doc = await callApi(`/methods/${name}`);
         selectedMethod = doc;
-        $$(".method-link").forEach((el) =>
-            el.classList.toggle("active", el.dataset.method === name),
-        );
+        // Re-render the sidebar so highlighting updates
+        renderCategoryList($("#search").value || "");
         renderMethodPanel(doc);
     } catch (err) {
         toast(err.message, "error");
@@ -173,37 +269,32 @@ async function selectMethod(name) {
 function effectiveAccountId() {
     return selectedAccountId || "<accountId>";
 }
-
-/**
- * Parse a TS-style params string like:
- *   "(message: MessageContent | string, threadId: string, type?: ThreadType)"
- * into a list of { name, type, optional } so we can show descriptions per arg.
- */
-function parseParams(paramsStr) {
-    const inner = paramsStr.replace(/^\(|\)$/g, "").trim();
-    if (!inner) return [];
-    // Split by top-level commas (depth-aware to handle generics)
-    const parts = [];
-    let depth = 0;
-    let buf = "";
-    for (const ch of inner) {
-        if (ch === "<" || ch === "(" || ch === "{" || ch === "[") depth++;
-        else if (ch === ">" || ch === ")" || ch === "}" || ch === "]") depth--;
-        if (ch === "," && depth === 0) {
-            parts.push(buf.trim());
-            buf = "";
-        } else {
-            buf += ch;
-        }
-    }
-    if (buf.trim()) parts.push(buf.trim());
-    return parts.map((p) => {
-        const m = /^([\w$]+)(\?)?\s*:\s*(.+)$/.exec(p);
-        if (!m) return { name: p, type: "", optional: false };
-        return { name: m[1], type: m[3].trim(), optional: !!m[2] };
-    });
+function effectiveKey() {
+    return savedApiKey || "<paste API key của bạn ở sidebar>";
 }
 
+/**
+ * Build the sample request body from method examples + paramNames.
+ * Multi-arg → { paramName: arg }, single object arg → flatten.
+ */
+function argsToBody(args, paramNames) {
+    if (paramNames.length === 0) return {};
+    if (
+        paramNames.length === 1 &&
+        args[0] &&
+        typeof args[0] === "object" &&
+        !Array.isArray(args[0])
+    ) {
+        return args[0];
+    }
+    const obj = {};
+    paramNames.forEach((name, i) => {
+        if (args[i] !== undefined) obj[name] = args[i];
+    });
+    return obj;
+}
+
+// ---- Render method panel ----
 function renderMethodPanel(doc) {
     $("#welcome").classList.add("hidden");
     $("#methodPanel").classList.remove("hidden");
@@ -225,75 +316,83 @@ function renderMethodPanel(doc) {
 
     // 1. URL
     $("#docUrl").innerHTML =
-        `<span class="http-verb">POST</span>${escapeHtml(fullUrl)}`;
+        `<span class="bg-primary-600 text-white px-2 py-0.5 rounded text-[11px] font-bold tracking-wider mr-2">POST</span>${escapeHtml(fullUrl)}`;
 
     // 2. Headers
     $("#docHeaders").textContent =
         `Content-Type: application/json
-X-API-Key: zk_xxxxxxxxx...
+X-API-Key: ${effectiveKey()}`;
 
-# Hoặc dùng Bearer thay vì X-API-Key:
-# Authorization: Bearer zk_xxxxxxxxx...`;
-
-    // 3. Request body — first example.
-    // Body chính là mảng args trực tiếp. Method không tham số → mảng rỗng [].
+    // 3. Body — first example
     const examples = doc.examples?.length ? doc.examples : [{ summary: "Default", args: [] }];
     const firstExample = examples[0];
-    const reqBody = firstExample.args ?? [];
+    const reqBody = argsToBody(firstExample.args ?? [], doc.paramNames ?? []);
     $("#docRequest").textContent = JSON.stringify(reqBody, null, 2);
 
-    // Field descriptions parsed from TS signature
-    const fields = parseParams(doc.params);
-    if (fields.length > 0) {
-        $("#docFields").classList.remove("hidden");
-        const ul = $("#docFieldList");
-        ul.innerHTML = "";
-        fields.forEach((f, i) => {
-            const li = document.createElement("li");
-            li.innerHTML = `
-                <code>args[${i}]</code>
-                <span class="field-name">${escapeHtml(f.name)}</span>
-                ${f.optional ? '<span class="field-opt">(tuỳ chọn)</span>' : ""}
-                <span class="field-type">${escapeHtml(f.type)}</span>
-            `;
-            ul.appendChild(li);
-        });
-    } else {
-        $("#docFields").classList.add("hidden");
-    }
+    // 4. Fields table
+    renderFieldsTable(doc.fields ?? []);
 
-    // 4. Response — show envelope shape with returnType
+    // 5. Response — actual envelope with sample data
     const sampleResp = {
         ok: true,
-        data: `<${doc.returnType.replace(/\s+/g, " ").replace(/^Promise<|>$/g, "")}>`,
+        data: doc.sampleResponse ?? { /* shape: xem return type */ },
         meta: { ts: Date.now(), ms: 142 },
     };
     $("#docResponse").textContent = JSON.stringify(sampleResp, null, 2);
-
-    // 5. More examples (skip first since shown above)
-    const moreBox = $("#docMoreExamples");
-    moreBox.innerHTML = "";
-    if (examples.length > 1) {
-        examples.slice(1).forEach((ex) => {
-            const wrap = document.createElement("div");
-            wrap.className = "example-card";
-            wrap.innerHTML = `
-                <div class="example-summary">${escapeHtml(ex.summary)}</div>
-                <pre class="code-block code-json">${escapeHtml(JSON.stringify(ex.args ?? [], null, 2))}</pre>
-            `;
-            moreBox.appendChild(wrap);
-        });
-    } else {
-        moreBox.innerHTML = '<p class="muted">Chỉ có 1 ví dụ trên.</p>';
-    }
 
     // 6. cURL
     const curl =
         `curl -X POST '${fullUrl}' \\\n` +
         `  -H 'Content-Type: application/json' \\\n` +
-        `  -H 'X-API-Key: zk_xxxxxxxxx...' \\\n` +
+        `  -H 'X-API-Key: ${effectiveKey()}' \\\n` +
         `  -d '${JSON.stringify(reqBody)}'`;
     $("#docCurl").textContent = curl;
+
+    // 7. More examples
+    const moreBox = $("#docMoreExamples");
+    moreBox.innerHTML = "";
+    if (examples.length > 1) {
+        examples.slice(1).forEach((ex) => {
+            const wrap = document.createElement("div");
+            wrap.className = "bg-slate-50 border border-slate-200 rounded p-3";
+            const exBody = argsToBody(ex.args ?? [], doc.paramNames ?? []);
+            wrap.innerHTML = `
+                <div class="text-sm font-semibold mb-2">${escapeHtml(ex.summary)}</div>
+                <pre class="bg-slate-900 text-slate-100 p-3 rounded font-mono text-xs overflow-x-auto">${escapeHtml(JSON.stringify(exBody, null, 2))}</pre>
+            `;
+            moreBox.appendChild(wrap);
+        });
+        $("#examplesSection").classList.remove("hidden");
+    } else {
+        $("#examplesSection").classList.add("hidden");
+    }
+}
+
+function renderFieldsTable(fields) {
+    const tbody = $("#fieldsTable tbody");
+    tbody.innerHTML = "";
+    if (fields.length === 0) {
+        $("#fieldsSection").classList.add("hidden");
+        return;
+    }
+    $("#fieldsSection").classList.remove("hidden");
+    fields.forEach((f) => {
+        const tr = document.createElement("tr");
+        const isNested = f.name.includes(".");
+        const nameCls = isNested
+            ? "ml-3 inline-block font-mono text-xs px-2 py-0.5 bg-purple-50 text-purple-700 border border-purple-200 rounded"
+            : "inline-block font-mono text-xs px-2 py-0.5 bg-primary-50 text-primary-700 border border-primary-200 rounded font-semibold";
+        const reqCell = f.required
+            ? '<span class="text-green-700 font-bold">✓</span>'
+            : '<span class="text-slate-400">—</span>';
+        tr.innerHTML = `
+            <td class="px-3 py-2 align-top"><span class="${nameCls}">${escapeHtml(f.name)}</span></td>
+            <td class="px-3 py-2 align-top font-mono text-xs text-purple-700">${escapeHtml(f.type)}</td>
+            <td class="px-3 py-2 align-top">${reqCell}</td>
+            <td class="px-3 py-2 align-top text-slate-700 leading-relaxed">${escapeHtml(f.description)}</td>
+        `;
+        tbody.appendChild(tr);
+    });
 }
 
 $("#copyCurl").addEventListener("click", async () => {
@@ -307,6 +406,7 @@ $("#copyCurl").addEventListener("click", async () => {
 });
 
 // ---- Init ----
+loadKey();
 (async () => {
     await Promise.all([loadAccounts(), loadMethods()]);
     if (allMethods.find((m) => m.name === "sendMessage")) selectMethod("sendMessage");

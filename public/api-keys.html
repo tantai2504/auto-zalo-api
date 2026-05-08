@@ -4,77 +4,86 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>API Keys — Zalo Auto</title>
-    <link rel="stylesheet" href="/styles.css" />
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="/tailwind-init.js"></script>
     <script src="/config.js"></script>
     <script src="/auth-guard.js"></script>
 </head>
-<body>
-    <header>
-        <div class="header-inner">
+<body class="min-h-screen bg-slate-50 text-slate-900 font-sans">
+
+    <header class="bg-gradient-to-r from-primary-600 to-primary-800 text-white shadow">
+        <div class="max-w-7xl mx-auto px-6 py-5 flex items-center justify-between gap-4 flex-wrap">
             <div>
-                <h1>API Keys</h1>
-                <p class="muted">Tạo và quản lý API key cho từng người dùng / app</p>
+                <h1 class="text-xl font-semibold">API Keys</h1>
+                <p class="text-sm text-white/80 mt-0.5">Tạo và quản lý API key cho từng client / app</p>
             </div>
-            <nav class="header-nav">
-                <a href="/">Tài khoản</a>
-                <a href="/explorer.html">API Explorer</a>
-                <a href="/docs" target="_blank" rel="noopener">Swagger</a>
-                <a href="#" id="logoutBtn">Đăng xuất</a>
+            <nav class="flex flex-wrap gap-2 text-sm">
+                <a href="/" class="px-3 py-1.5 rounded-md bg-white/10 hover:bg-white/20 transition-colors">Tài khoản</a>
+                <a href="/explorer.html" class="px-3 py-1.5 rounded-md bg-white/10 hover:bg-white/20 transition-colors">API Docs</a>
+                <a href="#" id="logoutBtn" class="px-3 py-1.5 rounded-md bg-white/10 hover:bg-white/20 transition-colors">Đăng xuất</a>
             </nav>
         </div>
     </header>
 
-    <main>
-        <section class="card">
-            <div class="header-row">
-                <h2>Danh sách API key</h2>
-                <div class="actions-row">
-                    <button id="newKeyBtn">+ Tạo key mới</button>
-                    <button id="reloadBtn" class="ghost">Tải lại</button>
+    <main class="max-w-7xl mx-auto px-6 py-6 space-y-5">
+
+        <section class="bg-white border border-slate-200 rounded-xl shadow-card overflow-hidden">
+            <div class="flex items-center justify-between p-5 border-b border-slate-200 flex-wrap gap-3">
+                <h2 class="text-base font-semibold">Danh sách API key</h2>
+                <div class="flex gap-2">
+                    <button id="newKeyBtn" class="px-3 py-1.5 text-sm bg-primary-600 hover:bg-primary-700 text-white font-medium rounded-md transition-colors">+ Tạo key mới</button>
+                    <button id="reloadBtn" class="px-3 py-1.5 text-sm border border-slate-300 hover:bg-slate-50 rounded-md transition-colors">Tải lại</button>
                 </div>
             </div>
-            <table id="keysTable">
-                <thead>
-                    <tr>
-                        <th>Tên</th>
-                        <th>Preview</th>
-                        <th>Trạng thái</th>
-                        <th>Hết hạn</th>
-                        <th>Last used</th>
-                        <th>Tạo</th>
-                        <th></th>
-                    </tr>
-                </thead>
-                <tbody></tbody>
-            </table>
-            <p id="emptyHint" class="muted hidden">Chưa có key nào. Bấm <strong>Tạo key mới</strong> để bắt đầu.</p>
+            <div class="overflow-x-auto">
+                <table id="keysTable" class="w-full text-sm">
+                    <thead class="bg-slate-50 text-xs uppercase tracking-wider text-slate-500">
+                        <tr>
+                            <th class="text-left px-4 py-3 font-semibold">Tên</th>
+                            <th class="text-left px-4 py-3 font-semibold">Preview</th>
+                            <th class="text-left px-4 py-3 font-semibold">Trạng thái</th>
+                            <th class="text-left px-4 py-3 font-semibold">Hết hạn</th>
+                            <th class="text-left px-4 py-3 font-semibold">Last used</th>
+                            <th class="text-left px-4 py-3 font-semibold">Tạo</th>
+                            <th class="text-right px-4 py-3 font-semibold"></th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-100"></tbody>
+                </table>
+                <p id="emptyHint" class="hidden p-8 text-center text-slate-500 text-sm">
+                    Chưa có key nào. Bấm <strong>+ Tạo key mới</strong> để bắt đầu.
+                </p>
+            </div>
         </section>
 
-        <section class="card">
-            <h2>Cách dùng</h2>
-            <p class="muted">Gắn key vào header request:</p>
-            <pre style="background:#1f2933;color:#e4ecf7;padding:12px;border-radius:6px;overflow-x:auto;font-size:12px;">curl -H 'X-API-Key: zk_xxx...' \
+        <section class="bg-white border border-slate-200 rounded-xl shadow-card p-5">
+            <h2 class="text-base font-semibold mb-2">Cách dùng</h2>
+            <p class="text-sm text-slate-500 mb-3">Gắn key vào header request:</p>
+            <pre class="bg-slate-900 text-slate-100 p-4 rounded-md text-xs font-mono overflow-x-auto"><code>curl -H 'X-API-Key: zk_xxx...' \
   https://your.host<span id="prefixDemo"></span>/accounts
 
 # Hoặc Bearer
 curl -H 'Authorization: Bearer zk_xxx...' \
-  https://your.host<span id="prefixDemo2"></span>/accounts</pre>
+  https://your.host<span id="prefixDemo2"></span>/accounts</code></pre>
         </section>
     </main>
 
     <!-- Create key modal -->
-    <div id="createModal" class="modal hidden">
-        <div class="modal-content">
-            <div class="modal-head">
-                <h3>Tạo API key</h3>
-                <button id="cancelCreate" class="ghost icon-btn" aria-label="Close">×</button>
+    <div id="createModal" class="hidden fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="bg-white rounded-xl shadow-modal max-w-md w-full p-6 animate-fadeIn">
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="text-base font-semibold">Tạo API key</h3>
+                <button id="cancelCreate" class="text-slate-500 hover:text-slate-900 text-xl leading-none w-8 h-8 flex items-center justify-center rounded hover:bg-slate-100">×</button>
             </div>
-            <form id="createForm">
-                <label>Tên (mô tả)
-                    <input name="name" type="text" placeholder="VD: Mobile app, Cron sync, ..." required />
+            <form id="createForm" class="space-y-3">
+                <label class="block">
+                    <span class="text-xs font-medium text-slate-600">Tên (mô tả)</span>
+                    <input name="name" type="text" placeholder="VD: Mobile app, Cron sync, ..." required
+                        class="mt-1 w-full px-3 py-2 border border-slate-300 rounded-md text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500 focus:outline-none" />
                 </label>
-                <label>Hết hạn sau
-                    <select name="expiresInSec">
+                <label class="block">
+                    <span class="text-xs font-medium text-slate-600">Hết hạn sau</span>
+                    <select name="expiresInSec" class="mt-1 w-full px-3 py-2 border border-slate-300 rounded-md text-sm bg-white focus:ring-2 focus:ring-primary-500 focus:border-primary-500 focus:outline-none">
                         <option value="0">Không bao giờ</option>
                         <option value="3600">1 giờ</option>
                         <option value="86400">1 ngày</option>
@@ -84,33 +93,32 @@ curl -H 'Authorization: Bearer zk_xxx...' \
                         <option value="31536000">1 năm</option>
                     </select>
                 </label>
-                <div class="modal-actions">
-                    <button type="submit">Tạo key</button>
+                <div class="flex justify-end pt-2">
+                    <button type="submit" class="px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-md text-sm font-medium transition-colors">Tạo key</button>
                 </div>
             </form>
         </div>
     </div>
 
     <!-- Show new key once -->
-    <div id="showKeyModal" class="modal hidden">
-        <div class="modal-content modal-wide">
-            <div class="modal-head">
-                <h3>Key đã tạo — copy ngay!</h3>
-            </div>
-            <div class="warn-box">
+    <div id="showKeyModal" class="hidden fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="bg-white rounded-xl shadow-modal max-w-2xl w-full p-6 animate-fadeIn">
+            <h3 class="text-base font-semibold mb-3">Key đã tạo — copy ngay!</h3>
+            <div class="bg-amber-50 border-l-4 border-amber-400 text-amber-900 px-4 py-3 rounded mb-4 text-sm">
                 ⚠️ Đây là lần DUY NHẤT server hiển thị key này.
                 Sau khi đóng popup, không thể xem lại được. Nếu mất, tạo key mới.
             </div>
-            <label>Plain key
-                <pre id="plainKeyView" class="key-view">—</pre>
+            <label class="block">
+                <span class="text-xs font-medium text-slate-600">Plain key</span>
+                <pre id="plainKeyView" class="mt-1 bg-slate-900 text-emerald-300 p-3 rounded-md text-sm font-mono break-all select-all">—</pre>
             </label>
-            <div class="modal-actions">
-                <button id="copyKeyBtn">Copy &amp; đóng</button>
+            <div class="flex justify-end pt-3">
+                <button id="copyKeyBtn" class="px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-md text-sm font-medium transition-colors">Copy &amp; đóng</button>
             </div>
         </div>
     </div>
 
-    <div id="toasts"></div>
+    <div id="toasts" class="fixed top-4 right-4 z-[100] flex flex-col gap-2 pointer-events-none"></div>
     <script src="/api-keys.js"></script>
 </body>
 </html>

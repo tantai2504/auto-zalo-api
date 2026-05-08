@@ -4,161 +4,191 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Tài khoản — Zalo Auto</title>
-    <link rel="stylesheet" href="/styles.css" />
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="/tailwind-init.js"></script>
     <script src="/config.js"></script>
     <script src="/auth-guard.js"></script>
 </head>
-<body>
-    <header>
-        <div class="header-inner">
+<body class="min-h-screen bg-slate-50 text-slate-900 font-sans">
+
+    <header class="bg-gradient-to-r from-primary-600 to-primary-800 text-white shadow">
+        <div class="max-w-7xl mx-auto px-6 py-5 flex items-center justify-between gap-4 flex-wrap">
             <div>
-                <h1>Zalo Auto</h1>
-                <p class="muted">Quản lý phiên đăng nhập đa tài khoản</p>
+                <h1 class="text-xl font-semibold">Zalo Auto</h1>
+                <p class="text-sm text-white/80 mt-0.5">Quản lý phiên đăng nhập đa tài khoản</p>
             </div>
-            <nav class="header-nav">
-                <a href="/add.html" class="primary">+ Thêm tài khoản</a>
-                <a href="/api-keys.html">API Keys</a>
-                <a href="/explorer.html">API Explorer</a>
-                <a href="/docs" target="_blank" rel="noopener">Swagger</a>
-                <a href="#" id="logoutBtn">Đăng xuất</a>
+            <nav class="flex flex-wrap gap-2 text-sm">
+                <a href="/add.html" class="px-3 py-1.5 rounded-md bg-white text-primary-700 hover:bg-primary-50 font-medium transition-colors">+ Thêm tài khoản</a>
+                <a href="/api-keys.html" class="px-3 py-1.5 rounded-md bg-white/10 hover:bg-white/20 transition-colors">API Keys</a>
+                <a href="/explorer.html" class="px-3 py-1.5 rounded-md bg-white/10 hover:bg-white/20 transition-colors">API Docs</a>
+                <a href="#" id="logoutBtn" class="px-3 py-1.5 rounded-md bg-white/10 hover:bg-white/20 transition-colors">Đăng xuất</a>
             </nav>
         </div>
     </header>
 
-    <main>
-        <section class="card">
-            <div class="header-row">
-                <h2>Tài khoản đã lưu</h2>
-                <div class="actions-row">
-                    <button id="checkAllBtn" class="ghost">Check tất cả</button>
-                    <button id="reloadBtn" class="ghost">Tải lại</button>
+    <main class="max-w-7xl mx-auto px-6 py-6 space-y-5">
+
+        <section class="bg-white border border-slate-200 rounded-xl shadow-card overflow-hidden">
+            <div class="flex items-center justify-between p-5 border-b border-slate-200 flex-wrap gap-3">
+                <h2 class="text-base font-semibold text-slate-900">Tài khoản đã lưu</h2>
+                <div class="flex gap-2">
+                    <button id="checkAllBtn" class="px-3 py-1.5 text-sm border border-slate-300 hover:bg-slate-50 rounded-md transition-colors">Check tất cả</button>
+                    <button id="reloadBtn" class="px-3 py-1.5 text-sm border border-slate-300 hover:bg-slate-50 rounded-md transition-colors">Tải lại</button>
                 </div>
             </div>
-            <table id="accountsTable">
-                <thead>
-                    <tr>
-                        <th>Tài khoản</th>
-                        <th>Account ID <span class="muted" title="UUID dùng trong URL /api/{accountId}/...">(API)</span></th>
-                        <th>Zalo UID</th>
-                        <th>Status</th>
-                        <th>Session</th>
-                        <th></th>
-                    </tr>
-                </thead>
-                <tbody></tbody>
-            </table>
-            <p id="emptyHint" class="muted hidden">Chưa có tài khoản nào — <a href="/add.html">thêm tài khoản đầu tiên</a>.</p>
+            <div class="overflow-x-auto">
+                <table id="accountsTable" class="w-full text-sm">
+                    <thead class="bg-slate-50 text-xs uppercase tracking-wider text-slate-500">
+                        <tr>
+                            <th class="text-left px-4 py-3 font-semibold">Tài khoản</th>
+                            <th class="text-left px-4 py-3 font-semibold">Account ID <span class="font-normal normal-case text-slate-400">(API)</span></th>
+                            <th class="text-left px-4 py-3 font-semibold">Zalo UID</th>
+                            <th class="text-left px-4 py-3 font-semibold">Status</th>
+                            <th class="text-left px-4 py-3 font-semibold">Session</th>
+                            <th class="text-right px-4 py-3 font-semibold"></th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-100"></tbody>
+                </table>
+                <p id="emptyHint" class="hidden p-8 text-center text-slate-500 text-sm">
+                    Chưa có tài khoản nào — <a href="/add.html" class="text-primary-600 hover:underline">thêm tài khoản đầu tiên</a>.
+                </p>
+            </div>
         </section>
     </main>
 
-    <!-- Edit modal: tabs for "Thông tin" + "Token mới" -->
-    <div id="modal" class="modal hidden">
-        <div class="modal-content modal-wide">
-            <div class="modal-head">
-                <h3 id="editTitle">Chỉnh sửa</h3>
-                <button id="cancelEdit" class="ghost icon-btn" aria-label="Close">×</button>
+    <!-- Edit modal -->
+    <div id="modal" class="hidden fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="bg-white rounded-xl shadow-modal max-w-xl w-full max-h-[90vh] overflow-y-auto animate-fadeIn">
+            <div class="flex items-center justify-between px-6 py-4 border-b border-slate-200">
+                <h3 id="editTitle" class="text-base font-semibold">Chỉnh sửa</h3>
+                <button id="cancelEdit" class="text-slate-500 hover:text-slate-900 text-xl leading-none w-8 h-8 flex items-center justify-center rounded hover:bg-slate-100">×</button>
             </div>
-            <div class="tabs">
-                <button class="tab active" data-edit-tab="info">Thông tin</button>
-                <button class="tab" data-edit-tab="token">Token mới</button>
-                <button class="tab" data-edit-tab="event">Event &amp; Webhook</button>
-            </div>
-
-            <div class="tab-panel" data-edit-panel="info">
-                <form id="editForm">
-                    <input type="hidden" name="id" />
-                    <label>Display name<input name="displayName" type="text" /></label>
-                    <label>Phone<input name="phone" type="text" /></label>
-                    <label>Status
-                        <select name="status">
-                            <option value="active">active</option>
-                            <option value="disabled">disabled</option>
-                        </select>
-                    </label>
-                    <div class="modal-actions">
-                        <button type="submit">Lưu thay đổi</button>
-                    </div>
-                </form>
+            <div class="border-b border-slate-200 px-6 flex gap-1">
+                <button class="tab-trigger px-3 py-2.5 text-sm font-medium border-b-2 border-primary-600 text-primary-600" data-edit-tab="info">Thông tin</button>
+                <button class="tab-trigger px-3 py-2.5 text-sm font-medium border-b-2 border-transparent text-slate-500 hover:text-slate-900" data-edit-tab="token">Token mới</button>
+                <button class="tab-trigger px-3 py-2.5 text-sm font-medium border-b-2 border-transparent text-slate-500 hover:text-slate-900" data-edit-tab="event">Event &amp; Webhook</button>
             </div>
 
-            <div class="tab-panel hidden" data-edit-panel="token">
-                <p class="muted">
-                    Dán token mới để cập nhật credentials cho tài khoản này.
-                    Server sẽ thử đăng nhập với token mới rồi thay thế credentials cũ.
-                </p>
-                <form id="refreshTokenForm">
-                    <input type="hidden" name="id" />
-                    <label>Token (base64)<textarea name="token" rows="4" placeholder="eyJ6X3V1aWQiOi..."></textarea></label>
-                    <details>
-                        <summary>Hoặc nhập trực tiếp z_uuid + zpw_sek</summary>
-                        <label>z_uuid<input name="z_uuid" type="text" /></label>
-                        <label>zpw_sek<input name="zpw_sek" type="text" /></label>
-                    </details>
-                    <div class="modal-actions">
-                        <button type="submit">Cập nhật token</button>
-                    </div>
-                </form>
-            </div>
-
-            <div class="tab-panel hidden" data-edit-panel="event">
-                <h4 class="subhead">Listener</h4>
-                <p class="muted">
-                    Khi bật, server lắng nghe event Zalo (message / reaction / undo / group_event ...)
-                    cho tài khoản này. Listener tự attach khi có WebSocket subscriber hoặc webhook URL.
-                </p>
-                <div class="listener-toggle">
-                    <span>Trạng thái listener:</span>
-                    <span id="listenerBadge" class="badge"></span>
-                    <button id="listenerToggleBtn" class="ghost">—</button>
+            <div class="px-6 py-5">
+                <div class="tab-panel" data-edit-panel="info">
+                    <form id="editForm" class="space-y-3">
+                        <input type="hidden" name="id" />
+                        <label class="block">
+                            <span class="text-xs font-medium text-slate-600">Display name</span>
+                            <input name="displayName" type="text" class="mt-1 w-full px-3 py-2 border border-slate-300 rounded-md text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500 focus:outline-none" />
+                        </label>
+                        <label class="block">
+                            <span class="text-xs font-medium text-slate-600">Phone</span>
+                            <input name="phone" type="text" class="mt-1 w-full px-3 py-2 border border-slate-300 rounded-md text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500 focus:outline-none" />
+                        </label>
+                        <label class="block">
+                            <span class="text-xs font-medium text-slate-600">Status</span>
+                            <select name="status" class="mt-1 w-full px-3 py-2 border border-slate-300 rounded-md text-sm bg-white focus:ring-2 focus:ring-primary-500 focus:border-primary-500 focus:outline-none">
+                                <option value="active">active</option>
+                                <option value="disabled">disabled</option>
+                            </select>
+                        </label>
+                        <div class="flex justify-end pt-2">
+                            <button type="submit" class="px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-md text-sm font-medium transition-colors">Lưu thay đổi</button>
+                        </div>
+                    </form>
                 </div>
 
-                <hr class="modal-divider" />
+                <div class="tab-panel hidden" data-edit-panel="token">
+                    <p class="text-sm text-slate-500 mb-3">
+                        Dán token mới để cập nhật credentials. Server sẽ thử đăng nhập bằng token mới rồi thay credentials cũ.
+                    </p>
+                    <form id="refreshTokenForm" class="space-y-3">
+                        <input type="hidden" name="id" />
+                        <label class="block">
+                            <span class="text-xs font-medium text-slate-600">Token (base64)</span>
+                            <textarea name="token" rows="4" placeholder="eyJ6X3V1aWQiOi..." class="mt-1 w-full px-3 py-2 border border-slate-300 rounded-md text-xs font-mono focus:ring-2 focus:ring-primary-500 focus:border-primary-500 focus:outline-none"></textarea>
+                        </label>
+                        <details class="text-sm">
+                            <summary class="cursor-pointer text-slate-500 py-1">Hoặc nhập trực tiếp z_uuid + zpw_sek</summary>
+                            <div class="space-y-2 mt-2">
+                                <label class="block">
+                                    <span class="text-xs font-medium text-slate-600">z_uuid</span>
+                                    <input name="z_uuid" type="text" class="mt-1 w-full px-3 py-2 border border-slate-300 rounded-md text-xs font-mono focus:ring-2 focus:ring-primary-500 focus:border-primary-500 focus:outline-none" />
+                                </label>
+                                <label class="block">
+                                    <span class="text-xs font-medium text-slate-600">zpw_sek</span>
+                                    <input name="zpw_sek" type="text" class="mt-1 w-full px-3 py-2 border border-slate-300 rounded-md text-xs font-mono focus:ring-2 focus:ring-primary-500 focus:border-primary-500 focus:outline-none" />
+                                </label>
+                            </div>
+                        </details>
+                        <div class="flex justify-end pt-2">
+                            <button type="submit" class="px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-md text-sm font-medium transition-colors">Cập nhật token</button>
+                        </div>
+                    </form>
+                </div>
 
-                <h4 class="subhead">Webhook</h4>
-                <p class="muted">
-                    Khi listener bật, mọi event sẽ POST tới <code>webhookUrl</code>.
-                    Nếu có <code>webhookSecret</code>, body được ký HMAC-SHA256 — kiểm header
-                    <code>X-Signature: sha256=&lt;hex&gt;</code>.
-                </p>
-                <form id="webhookForm">
-                    <input type="hidden" name="id" />
-                    <label>Webhook URL
-                        <input name="webhookUrl" type="url" placeholder="https://your-server.com/zalo-events" />
-                    </label>
-                    <label>Webhook secret <span class="muted">(tuỳ chọn — để ký payload)</span>
-                        <input name="webhookSecret" type="text" placeholder="Để trống nếu không cần ký" />
-                    </label>
-                    <div class="modal-actions">
-                        <button type="submit">Lưu webhook</button>
+                <div class="tab-panel hidden" data-edit-panel="event">
+                    <h4 class="text-xs uppercase tracking-wider text-slate-500 font-bold mb-2">Listener</h4>
+                    <p class="text-sm text-slate-500 mb-3">
+                        Khi bật, server lắng nghe event Zalo (message / reaction / undo / group_event ...). Listener tự attach khi có WebSocket subscriber hoặc webhook URL.
+                    </p>
+                    <div class="flex items-center gap-3 px-3 py-2 bg-slate-50 rounded-md mb-4 text-sm">
+                        <span class="text-slate-700">Trạng thái:</span>
+                        <span id="listenerBadge" class="px-2 py-0.5 rounded text-xs font-semibold uppercase"></span>
+                        <button id="listenerToggleBtn" class="ml-auto px-3 py-1 text-xs border border-slate-300 hover:bg-white rounded transition-colors">—</button>
                     </div>
-                </form>
+
+                    <hr class="border-slate-200 my-4" />
+
+                    <h4 class="text-xs uppercase tracking-wider text-slate-500 font-bold mb-2">Webhook</h4>
+                    <p class="text-sm text-slate-500 mb-3">
+                        Khi listener bật, mọi event sẽ POST tới <code class="text-xs bg-slate-100 px-1 py-0.5 rounded">webhookUrl</code>.
+                        Có <code class="text-xs bg-slate-100 px-1 py-0.5 rounded">webhookSecret</code> → body được ký HMAC-SHA256 (header <code class="text-xs bg-slate-100 px-1 py-0.5 rounded">X-Signature</code>).
+                    </p>
+                    <form id="webhookForm" class="space-y-3">
+                        <input type="hidden" name="id" />
+                        <label class="block">
+                            <span class="text-xs font-medium text-slate-600">Webhook URL</span>
+                            <input name="webhookUrl" type="url" placeholder="https://your-server.com/zalo-events" class="mt-1 w-full px-3 py-2 border border-slate-300 rounded-md text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500 focus:outline-none" />
+                        </label>
+                        <label class="block">
+                            <span class="text-xs font-medium text-slate-600">Webhook secret <span class="text-slate-400">(tuỳ chọn)</span></span>
+                            <input name="webhookSecret" type="text" placeholder="Để trống nếu không cần ký" class="mt-1 w-full px-3 py-2 border border-slate-300 rounded-md text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500 focus:outline-none" />
+                        </label>
+                        <div class="flex justify-end pt-2">
+                            <button type="submit" class="px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-md text-sm font-medium transition-colors">Lưu webhook</button>
+                        </div>
+                    </form>
+                </div>
             </div>
         </div>
     </div>
 
     <!-- Cookie viewer modal -->
-    <div id="cookieModal" class="modal hidden">
-        <div class="modal-content modal-wide">
-            <div class="modal-head">
-                <h3>Cookie session — <span id="cookieAcc"></span></h3>
-                <button id="cancelCookie" class="ghost icon-btn" aria-label="Close">×</button>
+    <div id="cookieModal" class="hidden fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="bg-white rounded-xl shadow-modal max-w-2xl w-full max-h-[90vh] overflow-y-auto animate-fadeIn">
+            <div class="flex items-center justify-between px-6 py-4 border-b border-slate-200">
+                <h3 class="text-base font-semibold">Cookie session — <span id="cookieAcc" class="text-slate-500"></span></h3>
+                <button id="cancelCookie" class="text-slate-500 hover:text-slate-900 text-xl leading-none w-8 h-8 flex items-center justify-center rounded hover:bg-slate-100">×</button>
             </div>
-            <p class="muted">
-                Đây là cookie session đã được giải mã. Dùng để debug hoặc xuất sang tool khác.
-                <strong>Không chia sẻ ra ngoài.</strong>
-            </p>
-            <h4 class="subhead">Quick fields</h4>
-            <pre id="cookieSnapshot" class="code-block">—</pre>
-            <h4 class="subhead">Full credentials JSON</h4>
-            <pre id="cookieFull" class="code-block">—</pre>
-            <div class="modal-actions">
-                <button id="copyCookieBtn">Copy full JSON</button>
-                <button id="copyZpwSekBtn" class="ghost">Copy zpw_sek</button>
+            <div class="px-6 py-5 space-y-4">
+                <p class="text-sm text-slate-500">
+                    Cookie session đã giải mã. Dùng để debug. <strong class="text-red-600">Không chia sẻ ra ngoài.</strong>
+                </p>
+                <div>
+                    <h4 class="text-xs uppercase tracking-wider text-slate-500 font-bold mb-2">Quick fields</h4>
+                    <pre id="cookieSnapshot" class="bg-slate-900 text-slate-100 p-3 rounded-md text-xs overflow-auto max-h-64 font-mono">—</pre>
+                </div>
+                <div>
+                    <h4 class="text-xs uppercase tracking-wider text-slate-500 font-bold mb-2">Full credentials JSON</h4>
+                    <pre id="cookieFull" class="bg-slate-900 text-slate-100 p-3 rounded-md text-xs overflow-auto max-h-64 font-mono">—</pre>
+                </div>
+                <div class="flex justify-end gap-2">
+                    <button id="copyZpwSekBtn" class="px-3 py-1.5 text-sm border border-slate-300 hover:bg-slate-50 rounded-md transition-colors">Copy zpw_sek</button>
+                    <button id="copyCookieBtn" class="px-4 py-1.5 text-sm bg-primary-600 hover:bg-primary-700 text-white rounded-md font-medium transition-colors">Copy full JSON</button>
+                </div>
             </div>
         </div>
     </div>
 
-    <div id="toasts"></div>
+    <div id="toasts" class="fixed top-4 right-4 z-[100] flex flex-col gap-2 pointer-events-none"></div>
     <script src="/app.js"></script>
 </body>
 </html>
