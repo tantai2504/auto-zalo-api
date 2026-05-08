@@ -60,6 +60,22 @@ async function main(): Promise<void> {
     app.use(express.json({ limit: "10mb" }));
     app.use(pinoHttp({ logger }));
 
+    // Global request timeout — Cloudflare cuts at ~100s and returns 502 to the
+    // client even if our handler is still running. Force a 60s ceiling so we
+    // can fail with a proper envelope before that happens.
+    app.use((req, res, next) => {
+        const TIMEOUT_MS = 60_000;
+        const timer = setTimeout(() => {
+            if (!res.headersSent) {
+                fail(res, "INTERNAL_ERROR", "Request quá 60s — server bỏ cuộc");
+            }
+        }, TIMEOUT_MS);
+        timer.unref?.();
+        res.on("finish", () => clearTimeout(timer));
+        res.on("close", () => clearTimeout(timer));
+        next();
+    });
+
     // ----- Public endpoints (no auth required) -----------------------
     app.get("/health", async (_req, res) => {
         const dbUp = await pingDb();

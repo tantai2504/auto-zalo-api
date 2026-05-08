@@ -51,6 +51,11 @@ class SessionManager {
     private async create(accountId: string): Promise<ZaloApi> {
         const account = await getAccountWithCredentials(accountId);
         if (!account) throw new Error(`Account not found: ${accountId}`);
+        if (account.status !== "active") {
+            throw new Error(
+                `Account đang ở trạng thái '${account.status}'. Bật lại tài khoản trước khi gọi API.`,
+            );
+        }
 
         const zalo = new Zalo({
             selfListen: false,
@@ -58,12 +63,20 @@ class SessionManager {
             logging: false,
         });
 
-        const api = await zalo.login({
-            cookie: account.credentials.cookie,
-            imei: account.credentials.imei,
-            userAgent: account.credentials.userAgent,
-            language: account.credentials.language,
-        });
+        // zca-js's login() can hang indefinitely if Zalo doesn't answer (bad
+        // network, dead session, server-side block). Wrap with a hard timeout
+        // so the HTTP request fails fast instead of triggering a Cloudflare 502.
+        const LOGIN_TIMEOUT_MS = 15_000;
+        const api = await withTimeout(
+            zalo.login({
+                cookie: account.credentials.cookie,
+                imei: account.credentials.imei,
+                userAgent: account.credentials.userAgent,
+                language: account.credentials.language,
+            }),
+            LOGIN_TIMEOUT_MS,
+            `Zalo login quá ${LOGIN_TIMEOUT_MS / 1000}s — credentials có thể đã hết hạn. Cập nhật token tại trang Tài khoản.`,
+        );
 
         const now = Date.now();
         this.pool.set(accountId, { api, accountId, startedAt: now, lastUsedAt: now });
@@ -160,6 +173,22 @@ class SessionManager {
         }
         return evicted;
     }
+}
+
+/**
+ * Race a promise against a timeout. If the timeout fires first, throws the
+ * given message. Used to avoid hanging Zalo login requests blocking the event
+ * loop / Cloudflare timing out at 100s.
+ */
+function withTimeout<T>(p: Promise<T>, ms: number, message: string): Promise<T> {
+    return new Promise<T>((resolve, reject) => {
+        const t = setTimeout(() => reject(new Error(message)), ms);
+        t.unref?.();
+        p.then(
+            (v) => { clearTimeout(t); resolve(v); },
+            (err) => { clearTimeout(t); reject(err); },
+        );
+    });
 }
 
 export const sessions = new SessionManager();
